@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CommandBar Analytics Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#F5F7FA;font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;color:#1A1A2E;padding:20px 16px}
+.wrap{max-width:980px;margin:0 auto}
+.header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:4px}
+.header-left{display:flex;align-items:center;gap:10px}
+.logo{width:34px;height:34px;border-radius:8px;background:#002D72;display:flex;align-items:center;justify-content:center}
+.title{font-size:19px;font-weight:700;color:#002D72;letter-spacing:-.3px}
+.subtitle{font-size:12px;color:#8A9099}
+.import-btn{padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:#002D72;color:#fff;letter-spacing:.2px;display:inline-flex;align-items:center;gap:6px;border:none}
+.import-btn:hover{opacity:.85}
+.import-msg{margin:8px 0 4px;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:500;display:flex;align-items:center;justify-content:space-between}
+.import-msg.success{background:#2E7D3214;color:#2E7D32}
+.import-msg.error{background:#E5393514;color:#E53935}
+.import-msg .close{cursor:pointer;opacity:.6;font-size:16px}
+.tabs{display:flex;gap:6px;margin:16px 0 18px;flex-wrap:wrap}
+.tab{padding:8px 18px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid #E8ECF0;background:#fff;color:#8A9099;letter-spacing:.2px;transition:all .15s}
+.tab.active{border-color:#0960BB;background:#0960BB0D;color:#0960BB}
+.cards{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.card{flex:1 1 160px;padding:16px 18px;border-radius:12px;background:#fff;border:1px solid #E8ECF0;box-shadow:0 1px 3px rgba(0,45,114,.04)}
+.card-label{font-size:10px;font-weight:700;color:#8A9099;letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px}
+.card-value{font-size:26px;font-weight:700;letter-spacing:-.5px;line-height:1.1}
+.card-sub{font-size:11px;color:#8A9099;margin-top:3px}
+.charts{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.chart-card{padding:16px 18px;border-radius:12px;background:#fff;border:1px solid #E8ECF0;box-shadow:0 1px 3px rgba(0,45,114,.04)}
+.chart-title{font-size:12px;font-weight:700;color:#002D72;margin-bottom:12px}
+.chart-wrap{position:relative;width:100%;overflow:hidden}
+.insights{padding:16px 20px;border-radius:12px;background:#002D72;color:#fff;margin-bottom:16px}
+.insights h3{font-size:13px;font-weight:700;margin-bottom:8px}
+.insights div{font-size:12px;line-height:1.7;opacity:.88}
+.insights strong{color:#FFBF3F}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.badge-strong{background:#0960BB14;color:#0960BB}
+.badge-mixed{background:#FFBF3F14;color:#FFBF3F}
+.badge-weak{background:#E5393514;color:#E53935}
+.badge-dot{width:6px;height:6px;border-radius:50%;display:inline-block}
+.top5-item{padding:5px 0}
+.top5-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
+.top5-title{font-size:11px;color:#1A1A2E;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:8px}
+.top5-right{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.top5-count{font-size:11px;font-weight:700;color:#002D72}
+.top5-bar{height:6px;background:#F5F7FA;border-radius:3px;overflow:hidden}
+.top5-fill{height:100%;border-radius:3px;transition:width .4s ease}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead tr{border-bottom:2px solid #E8ECF0}
+th{padding:10px 8px;font-weight:600;font-size:10px;letter-spacing:.5px;text-transform:uppercase;cursor:pointer;user-select:none;transition:color .15s}
+th:first-child{text-align:left}
+th:hover{color:#002D72}
+td{padding:8px 8px;text-align:center}
+td:first-child{text-align:left;font-weight:500;max-width:300px}
+td:first-child div{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+tbody tr{border-bottom:1px solid #F0F2F5}
+tbody tr:nth-child(even){background:#FAFBFC}
+.type-tag{font-size:10px;font-weight:600;padding:2px 8px;border-radius:8px;display:inline-block}
+.detail-item{padding:8px 0;border-bottom:1px solid #F0F2F5}
+.detail-item:last-child{border-bottom:none}
+.detail-row{display:flex;justify-content:space-between;align-items:center}
+.detail-left{display:flex;align-items:center;gap:8px}
+.detail-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.detail-label{font-size:12px;font-weight:600;color:#1A1A2E}
+.detail-count{font-size:14px;font-weight:700}
+.detail-sub{margin-left:16px;margin-top:4px;font-size:11px;color:#8A9099}
+.funnel-step{margin-bottom:12px}
+.funnel-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
+.funnel-name{font-size:12px;font-weight:600;color:#1A1A2E}
+.funnel-val{font-size:12px;color:#8A9099}
+.funnel-drop{color:#E53935;margin-left:8px;font-size:11px}
+.funnel-track{height:24px;background:#F5F7FA;border-radius:6px;overflow:hidden;position:relative}
+.funnel-fill{height:100%;border-radius:6px;min-width:2px}
+.funnel-pct{position:absolute;left:8px;top:4px;font-size:11px;font-weight:600;color:#fff}
+.nudge-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0}
+.nudge-row+.nudge-row{border-top:1px solid #F0F2F5}
+.save-item{display:flex;align-items:center;gap:8px;padding:6px 0}
+.save-item+.save-item{border-top:1px solid #F0F2F5}
+.save-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.save-label{font-size:12px;flex:1}
+.save-count{font-size:12px;font-weight:600;color:#002D72}
+.footer{text-align:center;font-size:10px;color:#8A9099;padding:16px 0 12px;margin-top:8px}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
+      <div><div class="title">CommandBar Analytics</div><div class="subtitle" id="period-label">SouthState Correspondent</div></div>
+    </div>
+    <div>
+      <input type="file" id="csv-input" accept=".csv,.tsv,.txt" style="display:none">
+      <button class="import-btn" onclick="document.getElementById('csv-input').click()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Import CSV
+      </button>
+    </div>
+  </div>
+  <div id="import-msg"></div>
+
+  <!-- Tabs -->
+  <div id="tabs-bar" class="tabs">
+    <button class="tab active" data-tab="overview">Overview</button>
+    <button class="tab" data-tab="funnel">Engagement Funnel</button>
+    <button class="tab" data-tab="content">Content</button>
+    <button class="tab" data-tab="features">Features & Nudge</button>
+  </div>
+
+  <!-- Tab Panels -->
+  <div id="tab-overview"></div>
+  <div id="tab-funnel" class="hidden"></div>
+  <div id="tab-content" class="hidden"></div>
+  <div id="tab-features" class="hidden"></div>
+
+  <div class="footer" id="footer">CommandBar Analytics Dashboard · Powered by SiteImprove Events · SouthState Correspondent</div>
+</div>
+
+<script>
+// ── DATA ──
+let RAW_DATA = [];
+let PERIOD = "";
+let hasData = false;
+let currentTab = "overview";
+let contentSortField = "total";
+let contentSortDir = "desc";
+let charts = {};
+
+const CL = {navy:"#002D72",blue:"#0960BB",gold:"#FFBF3F",red:"#E53935",grey:"#8A9099",green:"#2E7D32"};
+
+function trunc(s,n=40){return s.length>n?s.slice(0,n-1)+"\u2026":s}
+function badge(pct){
+  const cls=pct>=50?"strong":pct>0?"mixed":"weak";
+  const color=pct>=50?CL.blue:pct>0?CL.gold:CL.red;
+  return `<span class="badge badge-${cls}"><span class="badge-dot" style="background:${color}"></span>${cls.charAt(0).toUpperCase()+cls.slice(1)}</span>`;
+}
+function card(label,value,sub,accent){
+  accent=accent||CL.navy;
+  return `<div class="card"><div class="card-label">${label}</div><div class="card-value" style="color:${accent}">${value}</div>${sub?`<div class="card-sub">${sub}</div>`:""}</div>`;
+}
+
+// ── PARSE ──
+function parseCSV(text){
+  const lines=text.split(/\r?\n/);
+  let period="",headerIdx=0;
+  for(let i=0;i<Math.min(lines.length,10);i++){
+    if(lines[i].includes("Period:"))period=lines[i].replace(/.*Period:\s*/,"").trim();
+    if(lines[i].replace(/"/g,"").startsWith("Category")){headerIdx=i;break;}
+  }
+  const results=[];
+  for(const line of lines.slice(headerIdx+1).filter(l=>l.trim())){
+    const p=line.split("\t").map(s=>s.replace(/^"|"$/g,"").trim());
+    if(p.length<6||p[0]!=="CommandBar")continue;
+    results.push({action:p[1],label:p[2],events:parseInt(p[3],10)||0,visits:parseInt(p[5],10)||0});
+  }
+  return{data:results,period:period||null};
+}
+
+// ── PROCESS ──
+function process(R){
+  const get=(a,l)=>R.filter(r=>r.action===a&&(!l||r.label===l)).reduce((s,r)=>s+r.events,0);
+  const getV=(a)=>{const r=R.find(x=>x.action===a);return r?r.visits:0;};
+  const dailyVisits=get("Daily Visit"),dailyVisitors=getV("Daily Visit"),railOpens=get("Open");
+  const nudgeShown=get("Nudge"),nudgeDismiss=get("Nudge Dismiss");
+  const clicks=R.filter(r=>r.action==="Click"),clickTotal=clicks.reduce((s,r)=>s+r.events,0);
+  const saves=R.filter(r=>r.action==="Save"),saveTotal=saves.reduce((s,r)=>s+r.events,0);
+  const shares=R.filter(r=>r.action==="Share"),shareTotal=shares.reduce((s,r)=>s+r.events,0);
+  const actionsTotal=clickTotal+saveTotal+shareTotal;
+  const myStuff=get("Click","Mystuff"),signup=get("Click","Signup");
+  const discover=clicks.filter(c=>c.label.startsWith("Discover")).reduce((s,c)=>s+c.events,0);
+  const recent=clicks.filter(c=>c.label.startsWith("Recent")).reduce((s,c)=>s+c.events,0);
+  const savedNav=clicks.filter(c=>c.label.startsWith("Saved")).reduce((s,c)=>s+c.events,0);
+  const blogNav=get("Click","Blog");
+
+  const actionBreakdown=[
+    {name:"My Stuff",value:myStuff,color:CL.navy},{name:"Share",value:shareTotal,color:CL.green},
+    {name:"Signup",value:signup,color:CL.blue},{name:"Save",value:saveTotal,color:CL.gold},
+    {name:"Recent Nav",value:recent,color:"#6B7280"},{name:"Saved Nav",value:savedNav,color:"#8B5CF6"},
+    {name:"Discover",value:discover,color:"#0891B2"},{name:"Blog Nav",value:blogNav,color:"#D97706"},
+  ].filter(f=>f.value>0).sort((a,b)=>b.value-a.value);
+
+  const actionDetail=[
+    {label:"My Stuff opens",count:myStuff,color:CL.navy},
+    {label:"Shares",count:shareTotal,color:CL.green,items:[...shares].sort((a,b)=>b.events-a.events).map(s=>s.label+" ("+s.events+")")},
+    {label:"Signup clicks",count:signup,color:CL.blue},
+    {label:"Saves",count:saveTotal,color:CL.gold,items:saves.map(s=>s.label+" ("+s.events+")")},
+    {label:"Discover clicks",count:discover,color:"#0891B2"},
+    {label:"Recent navigation",count:recent,color:"#6B7280"},
+    {label:"Saved item clicks",count:savedNav,color:"#8B5CF6"},
+    {label:"Blog nav",count:blogNav,color:"#D97706"},
+  ].filter(f=>f.count>0);
+
+  const content={};
+  ["Blog","Page","Podcast"].forEach(ct=>{
+    R.filter(r=>r.action===ct).forEach(r=>{
+      if(!r.label.includes(": "))return;
+      const tier=r.label.split(": ")[0],title=r.label.split(": ").slice(1).join(": ");
+      const key=ct+"|"+title;
+      if(!content[key])content[key]={title,type:ct,deepRead:0,skim:0,bounce:0,listener:0,deepListen:0};
+      const m={"Deep Read":"deepRead","Skim":"skim","Bounce":"bounce","Listener":"listener","Deep Listen":"deepListen"};
+      if(m[tier])content[key][m[tier]]=r.events;
+    });
+  });
+  const articles=Object.values(content).map(d=>{
+    const total=d.deepRead+d.skim+d.bounce+d.listener+d.deepListen;
+    const engaged=d.deepRead+d.listener+d.deepListen;
+    return{...d,total,engPct:total?Math.round(engaged/total*100):0};
+  }).sort((a,b)=>b.total-a.total);
+
+  const totalContent=articles.reduce((s,a)=>s+a.total,0);
+  const totalDeep=articles.reduce((s,a)=>s+a.deepRead+a.deepListen,0);
+  const totalSkim=articles.reduce((s,a)=>s+a.skim,0);
+  const totalBounce=articles.reduce((s,a)=>s+a.bounce,0);
+
+  return{dailyVisits,dailyVisitors,railOpens,nudgeShown,nudgeDismiss,clickTotal,clicks,saveTotal,saves,shareTotal,shares,actionsTotal,actionBreakdown,actionDetail,articles,totalContent,totalDeep,totalSkim,totalBounce,myStuff,signup};
+}
+
+// ── RENDER ──
+function render(){
+  const d=process(RAW_DATA);
+  const engRate=d.dailyVisits?(d.railOpens/d.dailyVisits*100).toFixed(1):"0";
+  const deepPct=d.totalContent?Math.round(d.totalDeep/d.totalContent*100):0;
+  const blogs=d.articles.filter(a=>a.type==="Blog");
+  const pods=d.articles.filter(a=>a.type==="Podcast");
+  const top5=d.articles.slice(0,5);
+
+  // Destroy old charts
+  Object.values(charts).forEach(c=>c.destroy());
+  charts={};
+
+  document.getElementById("period-label").textContent=(PERIOD?PERIOD+" \u00b7 ":"")+"SouthState Correspondent";
+
+  // ── OVERVIEW ──
+  let html=`<div class="cards">${card("Daily Visitors",d.dailyVisits,d.dailyVisitors+" unique sessions")}${card("Rail Opens",d.railOpens,engRate+"% of visitors",CL.blue)}${card("Actions",d.actionsTotal,d.clickTotal+" clicks, "+d.saveTotal+" saves, "+d.shareTotal+" shares",CL.green)}</div>`;
+  html+=`<div class="charts">`;
+  html+=`<div class="chart-card" style="flex:1 1 300px"><div class="chart-title">Engagement Funnel</div><div class="chart-wrap" style="height:170px"><canvas id="c-funnel"></canvas></div></div>`;
+  html+=`<div class="chart-card" style="flex:1 1 180px"><div class="chart-title">Content by Type</div><div class="chart-wrap" style="height:170px"><canvas id="c-type"></canvas></div></div>`;
+  html+=`<div class="chart-card" style="flex:1 1 240px"><div class="chart-title">Top 5 Content</div>`;
+  top5.forEach((a,i)=>{
+    const pct=top5[0].total>0?(a.total/top5[0].total*100):0;
+    const color=a.engPct>=50?CL.blue:a.engPct>0?CL.gold:CL.red;
+    html+=`<div class="top5-item"><div class="top5-row"><span class="top5-title">${trunc(a.title,32)}</span><div class="top5-right"><span class="top5-count">${a.total}</span>${badge(a.engPct)}</div></div><div class="top5-bar"><div class="top5-fill" style="width:${pct}%;background:${color}"></div></div></div>`;
+  });
+  html+=`</div></div>`;
+  html+=`<div class="insights"><h3>Quick Insights</h3><div><div><strong>Reach:</strong> ${d.dailyVisits} unique daily visitors across ${d.dailyVisitors} sessions.</div><div><strong>Engagement:</strong> ${engRate}% of visitors opened the rail. ${d.articles.length} pieces tracked with ${deepPct}% deep engagement.</div><div><strong>Actions:</strong> ${d.shareTotal} shares, ${d.saveTotal} saves, ${d.clickTotal} navigation clicks.</div></div></div>`;
+  document.getElementById("tab-overview").innerHTML=html;
+
+  // Charts
+  const funnelData=[{l:"Daily Visitors",v:d.dailyVisits,c:CL.blue},{l:"Rail Opens",v:d.railOpens,c:CL.gold},{l:"Actions",v:d.actionsTotal,c:CL.green}];
+  charts.funnel=new Chart(document.getElementById("c-funnel"),{type:"bar",data:{labels:funnelData.map(f=>f.l),datasets:[{data:funnelData.map(f=>f.v),backgroundColor:funnelData.map(f=>f.c),borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099"}},x:{grid:{display:false},ticks:{font:{size:11},color:"#8A9099"}}}}});
+
+  const blogTotal=blogs.reduce((s,a)=>s+a.total,0),pageTotal=d.articles.filter(a=>a.type==="Page").reduce((s,a)=>s+a.total,0),podTotal=pods.reduce((s,a)=>s+a.total,0);
+  const typeData=[blogTotal,pageTotal,podTotal].filter(v=>v>0);
+  const typeLabels=["Blog","Page","Podcast"].filter((_,i)=>[blogTotal,pageTotal,podTotal][i]>0);
+  const typeColors=[CL.blue,"#8A9099",CL.gold].filter((_,i)=>[blogTotal,pageTotal,podTotal][i]>0);
+  charts.type=new Chart(document.getElementById("c-type"),{type:"doughnut",data:{labels:typeLabels,datasets:[{data:typeData,backgroundColor:typeColors,borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,cutout:"55%",plugins:{legend:{position:"bottom",labels:{font:{size:11},padding:8}}}}});
+
+  // ── FUNNEL TAB ──
+  let fhtml=`<div class="cards">${card("Daily Visitors",d.dailyVisits,"Unique sessions",CL.blue)}${card("Rail Opens",d.railOpens,engRate+"% open rate",CL.gold)}${card("Total Actions",d.actionsTotal,"All interactions",CL.green)}</div>`;
+  fhtml+=`<div class="charts">`;
+  fhtml+=`<div class="chart-card" style="flex:1 1 480px"><div class="chart-title">Conversion Funnel</div>`;
+  const fSteps=funnelData;
+  fSteps.forEach((step,i)=>{
+    const pct=fSteps[0].v?(step.v/fSteps[0].v*100):0;
+    const prev=i>0?fSteps[i-1].v:0;
+    const drop=i>0&&prev>0?((1-step.v/prev)*100).toFixed(0):null;
+    fhtml+=`<div class="funnel-step"><div class="funnel-header"><span class="funnel-name">${step.l}</span><span class="funnel-val">${step.v.toLocaleString()}${drop?`<span class="funnel-drop">\u2193${drop}%</span>`:""}</span></div><div class="funnel-track"><div class="funnel-fill" style="width:${pct}%;background:${step.c}">${pct>5?`<span class="funnel-pct">${pct.toFixed(1)}%</span>`:""}</div></div></div>`;
+  });
+  fhtml+=`</div>`;
+  fhtml+=`<div class="chart-card" style="flex:1 1 340px"><div class="chart-title">Actions Detail</div>`;
+  d.actionDetail.forEach(item=>{
+    fhtml+=`<div class="detail-item"><div class="detail-row"><div class="detail-left"><span class="detail-dot" style="background:${item.color}"></span><span class="detail-label">${item.label}</span></div><span class="detail-count" style="color:${item.color}">${item.count}</span></div>`;
+    if(item.items&&item.items.length)fhtml+=`<div class="detail-sub">${item.items.join("<br>")}</div>`;
+    fhtml+=`</div>`;
+  });
+  fhtml+=`</div></div>`;
+  const dropPct=d.dailyVisits>0?((1-d.railOpens/d.dailyVisits)*100).toFixed(0):0;
+  const convPct=d.railOpens>0?Math.round(d.actionsTotal/d.railOpens*100):0;
+  fhtml+=`<div class="insights"><div><strong>Funnel Analysis:</strong> Biggest drop is Daily Visitors (${d.dailyVisits}) to Rail Opens (${d.railOpens}) \u2014 ${dropPct}% drop-off. Once users open the rail, ${convPct}% take an action \u2014 strong conversion for engaged users.</div></div>`;
+  document.getElementById("tab-funnel").innerHTML=fhtml;
+
+  // ── CONTENT TAB ──
+  let cht=`<div class="cards">${card("Content Events",d.totalContent,d.articles.length+" pieces tracked")}${card("Deep Engagement",d.totalDeep,deepPct+"% of events",CL.blue)}${card("Skims",d.totalSkim,(d.totalContent?Math.round(d.totalSkim/d.totalContent*100):0)+"%",CL.gold)}${card("Bounces",d.totalBounce,(d.totalContent?Math.round(d.totalBounce/d.totalContent*100):0)+"%",CL.red)}</div>`;
+  cht+=`<div class="charts"><div class="chart-card" style="flex:1 1 380px"><div class="chart-title">Top Blog Articles (${blogs.length})</div><div class="chart-wrap" style="height:${Math.max(160,Math.min(blogs.length,10)*26+20)}px"><canvas id="c-blogs"></canvas></div></div>`;
+  cht+=`<div class="chart-card" style="flex:1 1 280px"><div class="chart-title">Top Podcast Episodes (${pods.length})</div>`;
+  if(pods.length>0){pods.slice(0,10).forEach((ep,i)=>{
+    cht+=`<div style="padding:8px 0;${i<Math.min(pods.length,10)-1?"border-bottom:1px solid #F0F2F5":""}"><div style="font-size:12px;font-weight:500;margin-bottom:4px;line-height:1.3">${trunc(ep.title,55)}</div><div style="display:flex;gap:10px;font-size:11px;flex-wrap:wrap;align-items:center">`;
+    if(ep.deepListen)cht+=`<span style="color:${CL.blue};font-weight:600">Deep Listen: ${ep.deepListen}</span>`;
+    if(ep.listener)cht+=`<span style="color:${CL.blue};font-weight:600">Listener: ${ep.listener}</span>`;
+    if(ep.skim)cht+=`<span style="color:#D4A017;font-weight:600">Skim: ${ep.skim}</span>`;
+    if(ep.bounce)cht+=`<span style="color:${CL.red};font-weight:600">Bounce: ${ep.bounce}</span>`;
+    cht+=`<span style="color:#8A9099">Total: ${ep.total}</span>${badge(ep.engPct)}</div></div>`;
+  });}else{cht+=`<div style="font-size:12px;color:#8A9099;padding:16px 0">No podcast data this period.</div>`;}
+  cht+=`</div></div>`;
+
+  // Sortable table
+  cht+=`<div class="chart-card" style="flex:1 1 100%;padding:0;overflow:hidden"><table id="content-table"><thead><tr>`;
+  const cols=[{l:"Title",f:"title",c:"#8A9099",a:"left"},{l:"Type",f:"type",c:"#8A9099"},{l:"Deep",f:"deepRead",c:CL.blue},{l:"Skim",f:"skim",c:"#D4A017"},{l:"Bounce",f:"bounce",c:CL.red},{l:"Total",f:"total",c:"#8A9099"},{l:"Signal",f:"engPct",c:"#8A9099"}];
+  cols.forEach(col=>{
+    const active=contentSortField===col.f;
+    const arrow=active?(contentSortDir==="desc"?" \u25BC":" \u25B2"):"";
+    cht+=`<th data-sort="${col.f}" style="text-align:${col.a||"center"};color:${active?"#002D72":col.c}">${col.l}${arrow}</th>`;
+  });
+  cht+=`</tr></thead><tbody>`;
+  const sorted=[...d.articles].sort((a,b)=>{
+    const f=contentSortField,dir=contentSortDir;
+    if(f==="title"||f==="type"){const av=(a[f]||"").toLowerCase(),bv=(b[f]||"").toLowerCase();return dir==="asc"?av.localeCompare(bv):bv.localeCompare(av);}
+    return dir==="asc"?(a[f]||0)-(b[f]||0):(b[f]||0)-(a[f]||0);
+  });
+  sorted.forEach(a=>{
+    const tc=a.type==="Blog"?CL.blue:a.type==="Podcast"?CL.gold:"#8A9099";
+    const bg=a.type==="Blog"?CL.blue+"14":a.type==="Podcast"?CL.gold+"14":"#8A909914";
+    cht+=`<tr><td><div>${a.title}</div></td><td><span class="type-tag" style="background:${bg};color:${tc}">${a.type}</span></td>`;
+    cht+=`<td style="font-weight:600;color:${a.deepRead?CL.blue:"#D0D5DD"}">${a.deepRead||"\u2013"}</td>`;
+    cht+=`<td style="font-weight:600;color:${a.skim?"#D4A017":"#D0D5DD"}">${a.skim||"\u2013"}</td>`;
+    cht+=`<td style="font-weight:600;color:${a.bounce?CL.red:"#D0D5DD"}">${a.bounce||"\u2013"}</td>`;
+    cht+=`<td style="font-weight:700;color:#002D72">${a.total}</td><td>${badge(a.engPct)}</td></tr>`;
+  });
+  cht+=`</tbody></table></div>`;
+  document.getElementById("tab-content").innerHTML=cht;
+
+  // Blog chart
+  const b10=blogs.slice(0,10);
+  charts.blogs=new Chart(document.getElementById("c-blogs"),{type:"bar",data:{labels:b10.map(b=>trunc(b.title,28)),datasets:[{label:"Deep Read",data:b10.map(b=>b.deepRead),backgroundColor:CL.blue},{label:"Skim",data:b10.map(b=>b.skim),backgroundColor:CL.gold},{label:"Bounce",data:b10.map(b=>b.bounce),backgroundColor:CL.red}]},options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:"bottom",labels:{font:{size:10},padding:6}}},scales:{x:{stacked:true,grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099"}},y:{stacked:true,grid:{display:false},ticks:{font:{size:10},color:"#4C4C4C"}}}}});
+
+  // Sort listeners
+  document.querySelectorAll("#content-table th[data-sort]").forEach(th=>{
+    th.addEventListener("click",()=>{
+      const f=th.dataset.sort;
+      if(contentSortField===f)contentSortDir=contentSortDir==="desc"?"asc":"desc";
+      else{contentSortField=f;contentSortDir="desc";}
+      render();
+    });
+  });
+
+  // ── FEATURES TAB ──
+  let fth=`<div class="cards">${card("Nudges Shown",d.nudgeShown,d.nudgeDismiss+" dismissed",CL.blue)}${card("Saves",d.saveTotal,"Articles bookmarked",CL.gold)}${card("Shares",d.shareTotal,"Peer-to-peer",CL.green)}${card("Nav Clicks",d.clickTotal,"Interactions",CL.navy)}</div>`;
+  fth+=`<div class="charts"><div class="chart-card" style="flex:1 1 350px"><div class="chart-title">Feature Usage</div><div class="chart-wrap" style="height:190px"><canvas id="c-features"></canvas></div></div>`;
+  fth+=`<div class="chart-card" style="flex:1 1 280px"><div class="chart-title">Nudge Performance</div>`;
+  [{l:"Shown",v:d.nudgeShown,c:CL.blue},{l:"Dismissed",v:d.nudgeDismiss,c:CL.gold},{l:"Auto-closed",v:Math.max(0,d.nudgeShown-d.nudgeDismiss),c:"#8A9099"},{l:"Clicked",v:0,c:CL.green}].forEach(item=>{
+    fth+=`<div class="nudge-row"><div class="detail-left"><span class="detail-dot" style="background:${item.c}"></span><span style="font-size:12px">${item.l}</span></div><span style="font-size:14px;font-weight:700;color:${item.c}">${item.v}</span></div>`;
+  });
+  fth+=`<div style="font-size:11px;color:#8A9099;margin-top:8px;line-height:1.5">Nudge triggers after 3 visits to loan/ARC content. Resets after each cycle.</div></div></div>`;
+
+  fth+=`<div class="charts"><div class="chart-card" style="flex:1 1 300px"><div class="chart-title">Saved Articles</div>`;
+  if(d.saves.length)d.saves.forEach(sv=>{fth+=`<div class="save-item"><span class="save-dot" style="background:${CL.gold}"></span><span class="save-label">${sv.label}</span><span class="save-count">${sv.events}</span></div>`;});
+  else fth+=`<div style="font-size:12px;color:#8A9099">No saves this period</div>`;
+  fth+=`</div><div class="chart-card" style="flex:1 1 300px"><div class="chart-title">Shared Content</div>`;
+  if(d.shares.length)[...d.shares].sort((a,b)=>b.events-a.events).forEach(sh=>{fth+=`<div class="save-item"><span class="save-dot" style="background:${CL.green}"></span><span class="save-label">${sh.label}</span><span class="save-count">${sh.events}</span></div>`;});
+  else fth+=`<div style="font-size:12px;color:#8A9099">No shares this period</div>`;
+  fth+=`</div></div>`;
+  document.getElementById("tab-features").innerHTML=fth;
+
+  const ab=d.actionBreakdown;
+  charts.features=new Chart(document.getElementById("c-features"),{type:"bar",data:{labels:ab.map(a=>a.name),datasets:[{data:ab.map(a=>a.value),backgroundColor:ab.map(a=>a.color),borderRadius:6}]},options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099"}},y:{grid:{display:false},ticks:{font:{size:11},color:"#4C4C4C"}}}}});
+}
+
+// ── TABS ──
+document.querySelectorAll("#tabs-bar .tab").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    currentTab=btn.dataset.tab;
+    ["overview","funnel","content","features"].forEach(t=>{
+      document.getElementById("tab-"+t).classList.toggle("hidden",t!==currentTab);
+    });
+  });
+});
+
+// ── IMPORT ──
+document.getElementById("csv-input").addEventListener("change",function(e){
+  const file=e.target.files?.[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(evt){
+    try{
+      const result=parseCSV(evt.target.result);
+      if(result.data.length===0){
+        document.getElementById("import-msg").innerHTML=`<div class="import-msg error"><span>No CommandBar events found.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>`;
+        return;
+      }
+      RAW_DATA=result.data;
+      if(result.period)PERIOD=result.period;
+      hasData=true;
+      document.getElementById("import-msg").innerHTML=`<div class="import-msg success"><span>${result.data.length} events loaded from ${file.name}</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>`;
+      render();
+    }catch(err){
+      document.getElementById("import-msg").innerHTML=`<div class="import-msg error"><span>Parse error: ${err.message}</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>`;
+    }
+  };
+  reader.readAsText(file,"utf-16");
+  this.value="";
+});
+
+// ── INIT ──
+render();
+</script>
+</body>
+</html>
