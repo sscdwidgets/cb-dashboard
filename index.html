@@ -488,82 +488,82 @@ async function exportPDF(){
   const origText=btn.innerHTML;
   btn.innerHTML="Generating...";btn.style.opacity=".6";btn.style.pointerEvents="none";
 
-  const {jsPDF}=window.jspdf;
-  const pdf=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
-  const pw=pdf.internal.pageSize.getWidth();
-  const ph=pdf.internal.pageSize.getHeight();
-  const margin=12;
-  const contentW=pw-margin*2;
+  try{
+    const {jsPDF}=window.jspdf;
+    const pdf=new jsPDF("l","mm","a4");
+    const pw=pdf.internal.pageSize.getWidth();
+    const ph=pdf.internal.pageSize.getHeight();
+    const margin=12;
+    const contentW=pw-margin*2;
 
-  // Helper: draw branded header on each page
-  function drawHeader(pageTitle){
-    pdf.setFillColor(0,45,114);
-    pdf.rect(0,0,pw,18,{style:"F"});
-    pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);
-    pdf.text("CommandBar Analytics",margin,12);
-    pdf.setFont("helvetica","normal");pdf.setFontSize(9);
-    pdf.text((PERIOD?PERIOD+" \u00b7 ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});
-    pdf.setFillColor(9,96,187);
-    pdf.rect(0,18,pw,6,{style:"F"});
-    pdf.setFont("helvetica","bold");pdf.setFontSize(8);pdf.setTextColor(255,255,255);
-    pdf.text(pageTitle.toUpperCase(),margin,22.5);
-    pdf.setTextColor(0,0,0);
+    function drawHeader(pageTitle,pageNum,totalPages){
+      pdf.setFillColor(0,45,114);
+      pdf.rect(0,0,pw,18,"F");
+      pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);
+      pdf.text("CommandBar Analytics",margin,12);
+      pdf.setFont("helvetica","normal");pdf.setFontSize(9);
+      pdf.text((PERIOD?PERIOD+" \u00b7 ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});
+      pdf.setFillColor(9,96,187);
+      pdf.rect(0,18,pw,6,"F");
+      pdf.setFont("helvetica","bold");pdf.setFontSize(8);pdf.setTextColor(255,255,255);
+      pdf.text(pageTitle.toUpperCase(),margin,22.5);
+      pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);
+      pdf.text("Page "+pageNum+" of "+totalPages,pw-margin,ph-5,{align:"right"});
+      pdf.text("CommandBar Analytics Dashboard \u00b7 SiteImprove Events",margin,ph-5);
+      pdf.setTextColor(0,0,0);
+    }
+
+    const tabs=["overview","content","insights","engagement"];
+    const tabNames=["Overview","Content","Insights","Engagement"];
+    const savedTab=currentTab;
+    const images=[];
+
+    for(let i=0;i<tabs.length;i++){
+      // Show tab, hide others
+      tabs.forEach(t=>{
+        const el=document.getElementById("tab-"+t);
+        el.style.display=t===tabs[i]?"block":"none";
+        el.classList.remove("hidden");
+      });
+      await new Promise(r=>setTimeout(r,600));
+
+      const el=document.getElementById("tab-"+tabs[i]);
+      const canvas=await html2canvas(el,{scale:1.5,backgroundColor:"#F5F7FA",useCORS:true,logging:false,windowWidth:980});
+      images.push(canvas.toDataURL("image/jpeg",0.92));
+    }
+
+    // Restore tabs
+    tabs.forEach(t=>{
+      const el=document.getElementById("tab-"+t);
+      el.style.display="";
+      el.classList.toggle("hidden",t!==savedTab);
+    });
+
+    // Build PDF
+    for(let i=0;i<images.length;i++){
+      if(i>0)pdf.addPage();
+      drawHeader(tabNames[i],i+1,images.length);
+
+      const img=new Image();
+      img.src=images[i];
+      await new Promise(r=>{img.onload=r;img.onerror=r;});
+
+      const availH=ph-32;
+      const ratio=img.width/img.height;
+      let imgW=contentW;
+      let imgH=imgW/ratio;
+      if(imgH>availH){imgH=availH;imgW=imgH*ratio;}
+      const xOff=margin+(contentW-imgW)/2;
+      pdf.addImage(images[i],"JPEG",xOff,27,imgW,imgH);
+    }
+
+    const filename="CommandBar-Analytics"+(PERIOD?"-"+PERIOD.replace(/[^a-zA-Z0-9]+/g,"-"):"")+".pdf";
+    pdf.save(filename);
+
+  }catch(err){
+    console.error("PDF export error:",err);
+    document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>PDF export failed: '+err.message+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
   }
-
-  // Helper: draw footer
-  function drawFooter(pageNum,totalPages){
-    pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);
-    pdf.text("CommandBar Analytics Dashboard \u00b7 Powered by SiteImprove Events",margin,ph-5);
-    pdf.text("Page "+pageNum+" of "+totalPages,pw-margin,ph-5,{align:"right"});
-  }
-
-  // Capture each tab as image
-  const tabs=["overview","content","insights","engagement"];
-  const tabNames=["Overview","Content","Insights","Engagement"];
-  const savedTab=currentTab;
-  const images=[];
-
-  for(let i=0;i<tabs.length;i++){
-    // Show this tab
-    tabs.forEach(t=>{document.getElementById("tab-"+t).classList.toggle("hidden",t!==tabs[i])});
-    // Wait for charts to render
-    await new Promise(r=>setTimeout(r,400));
-    const el=document.getElementById("tab-"+tabs[i]);
-    try{
-      const canvas=await html2canvas(el,{scale:2,backgroundColor:"#F5F7FA",useCORS:true,logging:false});
-      images.push(canvas.toDataURL("image/png"));
-    }catch(e){images.push(null);}
-  }
-
-  // Restore original tab
-  tabs.forEach(t=>{document.getElementById("tab-"+t).classList.toggle("hidden",t!==savedTab)});
-
-  // Build PDF pages
-  const totalPages=images.filter(im=>im).length;
-  let pageNum=0;
-  for(let i=0;i<images.length;i++){
-    if(!images[i])continue;
-    if(pageNum>0)pdf.addPage();
-    pageNum++;
-    drawHeader(tabNames[i]);
-    drawFooter(pageNum,totalPages);
-
-    // Fit image into available space
-    const img=new Image();
-    img.src=images[i];
-    await new Promise(r=>{img.onload=r});
-    const availH=ph-30-10; // below header, above footer
-    const ratio=img.width/img.height;
-    let imgW=contentW;
-    let imgH=imgW/ratio;
-    if(imgH>availH){imgH=availH;imgW=imgH*ratio;}
-    const xOff=margin+(contentW-imgW)/2;
-    pdf.addImage(images[i],"PNG",xOff,28,imgW,imgH);
-  }
-
-  // Download
-  const filename="CommandBar-Analytics"+(PERIOD?"-"+PERIOD.replace(/[^a-zA-Z0-9]/g,"-"):"")+".pdf";
-  pdf.save(filename);
 
   btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";
 }
