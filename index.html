@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CommandBar Analytics Dashboard v1.2</title>
+<title>CommandBar Analytics Dashboard v1.2.1</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -390,7 +390,7 @@ function render(){
   }
 
   // ── CONTENT TAB ──
-  let cht=`<div class="cards">${card("Content Events",d.totalContent,d.articles.length+" pieces tracked")}${card("Engaged",d.totalEngaged,deepPct+"% of events",CL.blue)}${card("Skims",d.totalSkim,(d.totalContent?Math.round(d.totalSkim/d.totalContent*100):0)+"%",CL.gold)}${card("Bounces",d.totalBounce,(d.totalContent?Math.round(d.totalBounce/d.totalContent*100):0)+"%",CL.red)}</div>`;
+  let cht=`<div id="content-charts"><div class="cards">${card("Content Events",d.totalContent,d.articles.length+" pieces tracked")}${card("Engaged",d.totalEngaged,deepPct+"% of events",CL.blue)}${card("Skims",d.totalSkim,(d.totalContent?Math.round(d.totalSkim/d.totalContent*100):0)+"%",CL.gold)}${card("Bounces",d.totalBounce,(d.totalContent?Math.round(d.totalBounce/d.totalContent*100):0)+"%",CL.red)}</div>`;
   cht+=`<div class="charts"><div class="chart-card" style="flex:1 1 380px"><div class="chart-title">Top Blog Articles (${blogs.length})</div><div class="chart-wrap" style="height:${Math.max(160,Math.min(blogs.length,10)*26+20)}px"><canvas id="c-blogs"></canvas></div></div>`;
   cht+=`<div class="chart-card" style="flex:1 1 280px"><div class="chart-title">Top Podcast Episodes (${pods.length})</div>`;
   if(pods.length>0){pods.slice(0,10).forEach((ep,i)=>{
@@ -401,7 +401,7 @@ function render(){
     if(ep.bounce)cht+=`<span style="color:${CL.red};font-weight:600">Bounce: ${ep.bounce}</span>`;
     cht+=`<span style="color:#8A9099">Total: ${ep.total}</span>${badge(ep.engPct)}</div></div>`;
   });}else{cht+=`<div style="font-size:12px;color:#8A9099;padding:16px 0">No podcast data this period.</div>`;}
-  cht+=`</div></div>`;
+  cht+=`</div></div></div><div id="content-table-wrap">`;
 
   // Sortable table
   cht+=`<div class="chart-card" style="flex:1 1 100%;padding:0;overflow:hidden"><table id="content-table"><thead><tr>`;
@@ -426,7 +426,7 @@ function render(){
     cht+=`<td style="font-weight:600;color:${a.bounce?CL.red:"#D0D5DD"}">${a.bounce||"\u2013"}</td>`;
     cht+=`<td style="font-weight:700;color:#002D72">${a.total}</td><td>${badge(a.engPct)}</td></tr>`;
   });
-  cht+=`</tbody></table></div>`;
+  cht+=`</tbody></table></div></div>`;
   document.getElementById("tab-content").innerHTML=cht;
 
   // Blog chart
@@ -495,31 +495,156 @@ async function exportPDF(){
     const ph=pdf.internal.pageSize.getHeight();
     const margin=12;
     const contentW=pw-margin*2;
+    const headerH=27;
+    const footerH=8;
+    const availH=ph-headerH-footerH;
+    let pageCount=0;
 
-    function drawHeader(pageTitle,pageNum,totalPages){
+    function drawHeader(title,contd){
       pdf.setFillColor(0,45,114);
       pdf.rect(0,0,pw,18,"F");
       pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);
-      pdf.text("CommandBar Analytics",margin,12);
+      pdf.text("CommandBar Analytics v1.2",margin,12);
       pdf.setFont("helvetica","normal");pdf.setFontSize(9);
       pdf.text((PERIOD?PERIOD+" \u00b7 ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});
       pdf.setFillColor(9,96,187);
       pdf.rect(0,18,pw,6,"F");
       pdf.setFont("helvetica","bold");pdf.setFontSize(8);pdf.setTextColor(255,255,255);
-      pdf.text(pageTitle.toUpperCase(),margin,22.5);
-      pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);
-      pdf.text("Page "+pageNum+" of "+totalPages,pw-margin,ph-5,{align:"right"});
-      pdf.text("CommandBar Analytics Dashboard \u00b7 SiteImprove Events",margin,ph-5);
+      pdf.text(title.toUpperCase()+(contd?" (CONTINUED)":""),margin,22.5);
       pdf.setTextColor(0,0,0);
+    }
+    function drawFooter(n){
+      pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);
+      pdf.text("CommandBar Analytics Dashboard v1.2 \u00b7 SiteImprove Events",margin,ph-5);
+      pdf.text("Page "+n,pw-margin,ph-5,{align:"right"});
+    }
+
+    // Helper: add a screenshot page (single or multi-page)
+    function addImagePages(imgData,canvasW,canvasH,tabName){
+      const imgW=contentW;
+      const totalImgH=(canvasH/canvasW)*contentW;
+      if(totalImgH<=availH){
+        if(pageCount>0)pdf.addPage();
+        pageCount++;drawHeader(tabName,false);drawFooter(pageCount);
+        pdf.addImage(imgData,"JPEG",margin,headerH,imgW,totalImgH);
+      }else{
+        const pxPerMM=canvasW/contentW;
+        const stripPx=availH*pxPerMM;
+        const numStrips=Math.ceil(canvasH/stripPx);
+        // Need original canvas for slicing — store it
+        const tmpImg=new Image();tmpImg.src=imgData;
+        for(let s=0;s<numStrips;s++){
+          if(pageCount>0)pdf.addPage();
+          pageCount++;drawHeader(tabName,s>0);drawFooter(pageCount);
+          const sy=s*stripPx;
+          const sh=Math.min(stripPx,canvasH-sy);
+          const strip=document.createElement("canvas");
+          strip.width=canvasW;strip.height=sh;
+          const ctx=strip.getContext("2d");
+          ctx.drawImage(tmpImg,0,sy,canvasW,sh,0,0,canvasW,sh);
+          pdf.addImage(strip.toDataURL("image/jpeg",0.92),"JPEG",margin,headerH,imgW,sh/pxPerMM);
+        }
+      }
+    }
+
+    // Helper: draw native table in PDF
+    function drawContentTable(articles,tabName){
+      const colDefs=[
+        {label:"TITLE",width:contentW*0.42,align:"left"},
+        {label:"TYPE",width:contentW*0.08,align:"center"},
+        {label:"ENGAGED",width:contentW*0.09,align:"center"},
+        {label:"SKIM",width:contentW*0.09,align:"center"},
+        {label:"BOUNCE",width:contentW*0.09,align:"center"},
+        {label:"TOTAL",width:contentW*0.09,align:"center"},
+        {label:"SIGNAL",width:contentW*0.14,align:"center"},
+      ];
+      const rowH=6.5;
+      const headH=8;
+      let y=headerH;
+
+      function newTablePage(contd){
+        if(pageCount>0)pdf.addPage();
+        pageCount++;drawHeader(tabName,contd);drawFooter(pageCount);
+        y=headerH;
+        // Draw table header
+        pdf.setFillColor(245,247,250);
+        pdf.rect(margin,y,contentW,headH,"F");
+        pdf.setFont("helvetica","bold");pdf.setFontSize(7);pdf.setTextColor(138,144,153);
+        let x=margin;
+        colDefs.forEach(c=>{
+          const tx=c.align==="left"?x+2:x+c.width/2;
+          pdf.text(c.label,tx,y+5.5,{align:c.align==="left"?"left":"center"});
+          x+=c.width;
+        });
+        y+=headH;
+        // Header line
+        pdf.setDrawColor(232,236,240);pdf.setLineWidth(0.3);
+        pdf.line(margin,y,margin+contentW,y);
+        y+=1;
+      }
+
+      newTablePage(true);
+
+      articles.forEach((a,idx)=>{
+        if(y+rowH>ph-footerH-2){newTablePage(true);}
+
+        // Zebra stripe
+        if(idx%2===1){pdf.setFillColor(250,251,252);pdf.rect(margin,y-0.5,contentW,rowH,"F");}
+
+        let x=margin;
+        // Title
+        pdf.setFont("helvetica","normal");pdf.setFontSize(8);pdf.setTextColor(26,26,46);
+        const titleTxt=a.title.length>65?a.title.slice(0,64)+"\u2026":a.title;
+        pdf.text(titleTxt,x+2,y+4);
+        x+=colDefs[0].width;
+
+        // Type
+        const tc=a.type==="Blog"?[9,96,187]:a.type==="Podcast"?[255,191,63]:[138,144,153];
+        pdf.setFont("helvetica","bold");pdf.setFontSize(7);pdf.setTextColor(tc[0],tc[1],tc[2]);
+        pdf.text(a.type,x+colDefs[1].width/2,y+4,{align:"center"});
+        x+=colDefs[1].width;
+
+        // Engaged
+        pdf.setFont("helvetica","bold");pdf.setFontSize(8);
+        if(a.engaged){pdf.setTextColor(9,96,187);pdf.text(String(a.engaged),x+colDefs[2].width/2,y+4,{align:"center"});}
+        else{pdf.setTextColor(208,213,221);pdf.text("\u2013",x+colDefs[2].width/2,y+4,{align:"center"});}
+        x+=colDefs[2].width;
+
+        // Skim
+        if(a.skim){pdf.setTextColor(212,160,23);pdf.text(String(a.skim),x+colDefs[3].width/2,y+4,{align:"center"});}
+        else{pdf.setTextColor(208,213,221);pdf.text("\u2013",x+colDefs[3].width/2,y+4,{align:"center"});}
+        x+=colDefs[3].width;
+
+        // Bounce
+        if(a.bounce){pdf.setTextColor(229,57,53);pdf.text(String(a.bounce),x+colDefs[4].width/2,y+4,{align:"center"});}
+        else{pdf.setTextColor(208,213,221);pdf.text("\u2013",x+colDefs[4].width/2,y+4,{align:"center"});}
+        x+=colDefs[4].width;
+
+        // Total
+        pdf.setFont("helvetica","bold");pdf.setTextColor(0,45,114);
+        pdf.text(String(a.total),x+colDefs[5].width/2,y+4,{align:"center"});
+        x+=colDefs[5].width;
+
+        // Signal
+        const sigColor=a.engPct>=50?[9,96,187]:a.engPct>0?[255,191,63]:[229,57,53];
+        const sigLabel=a.engPct>=50?"Strong":a.engPct>0?"Mixed":"Weak";
+        pdf.setFont("helvetica","bold");pdf.setFontSize(7);
+        pdf.setTextColor(sigColor[0],sigColor[1],sigColor[2]);
+        pdf.text(sigLabel,x+colDefs[6].width/2,y+4,{align:"center"});
+
+        // Row line
+        pdf.setDrawColor(240,242,245);pdf.setLineWidth(0.15);
+        pdf.line(margin,y+rowH-0.5,margin+contentW,y+rowH-0.5);
+
+        y+=rowH;
+      });
     }
 
     const tabs=["overview","content","insights","engagement"];
     const tabNames=["Overview","Content","Insights","Engagement"];
     const savedTab=currentTab;
-    const images=[];
 
     for(let i=0;i<tabs.length;i++){
-      // Show tab, hide others
       tabs.forEach(t=>{
         const el=document.getElementById("tab-"+t);
         el.style.display=t===tabs[i]?"block":"none";
@@ -527,9 +652,25 @@ async function exportPDF(){
       });
       await new Promise(r=>setTimeout(r,600));
 
-      const el=document.getElementById("tab-"+tabs[i]);
-      const canvas=await html2canvas(el,{scale:1.5,backgroundColor:"#F5F7FA",useCORS:true,logging:false,windowWidth:980});
-      images.push(canvas.toDataURL("image/jpeg",0.92));
+      if(tabs[i]==="content"){
+        // Content tab: capture charts section as screenshot
+        const chartsEl=document.getElementById("content-charts");
+        const chartsCanvas=await html2canvas(chartsEl,{scale:2,backgroundColor:"#F5F7FA",useCORS:true,logging:false,windowWidth:980});
+        addImagePages(chartsCanvas.toDataURL("image/jpeg",0.92),chartsCanvas.width,chartsCanvas.height,"Content");
+
+        // Content tab: build table natively in PDF
+        const d=process(RAW_DATA);
+        const sortedArticles=[...d.articles].sort((a,b)=>{
+          const f=contentSortField,dir=contentSortDir;
+          if(f==="title"||f==="type"){const av=(a[f]||"").toLowerCase(),bv=(b[f]||"").toLowerCase();return dir==="asc"?av.localeCompare(bv):bv.localeCompare(av);}
+          return dir==="asc"?(a[f]||0)-(b[f]||0):(b[f]||0)-(a[f]||0);
+        });
+        drawContentTable(sortedArticles,"Content");
+      }else{
+        const el=document.getElementById("tab-"+tabs[i]);
+        const canvas=await html2canvas(el,{scale:2,backgroundColor:"#F5F7FA",useCORS:true,logging:false,windowWidth:980});
+        addImagePages(canvas.toDataURL("image/jpeg",0.92),canvas.width,canvas.height,tabNames[i]);
+      }
     }
 
     // Restore tabs
@@ -539,30 +680,17 @@ async function exportPDF(){
       el.classList.toggle("hidden",t!==savedTab);
     });
 
-    // Build PDF
-    for(let i=0;i<images.length;i++){
-      if(i>0)pdf.addPage();
-      drawHeader(tabNames[i],i+1,images.length);
-
-      const img=new Image();
-      img.src=images[i];
-      await new Promise(r=>{img.onload=r;img.onerror=r;});
-
-      const availH=ph-32;
-      const ratio=img.width/img.height;
-      let imgW=contentW;
-      let imgH=imgW/ratio;
-      if(imgH>availH){imgH=availH;imgW=imgH*ratio;}
-      const xOff=margin+(contentW-imgW)/2;
-      pdf.addImage(images[i],"JPEG",xOff,27,imgW,imgH);
-    }
-
-    const filename="CommandBar-Analytics"+(PERIOD?"-"+PERIOD.replace(/[^a-zA-Z0-9]+/g,"-"):"")+".pdf";
-    pdf.save(filename);
+    const fn="CommandBar-Analytics"+(PERIOD?"-"+PERIOD.replace(/[^a-zA-Z0-9]+/g,"-"):"")+".pdf";
+    pdf.save(fn);
 
   }catch(err){
     console.error("PDF export error:",err);
     document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>PDF export failed: '+err.message+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
+    ["overview","content","insights","engagement"].forEach(t=>{
+      const el=document.getElementById("tab-"+t);
+      el.style.display="";
+      el.classList.toggle("hidden",t!==currentTab);
+    });
   }
 
   btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";
