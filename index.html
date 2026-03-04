@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CommandBar Analytics Dashboard</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#F5F7FA;font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;color:#1A1A2E;padding:20px 16px}
@@ -94,11 +96,15 @@ tbody tr:nth-child(even){background:#FAFBFC}
       <div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
       <div><div class="title">CommandBar Analytics</div><div class="subtitle" id="period-label">SouthState Correspondent</div></div>
     </div>
-    <div>
+    <div style="display:flex;gap:8px">
       <input type="file" id="csv-input" accept=".csv,.tsv,.txt" style="display:none">
       <button class="import-btn" onclick="document.getElementById('csv-input').click()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         Import CSV
+      </button>
+      <button class="import-btn" id="export-btn" onclick="exportPDF()" style="background:#0960BB">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export PDF
       </button>
     </div>
   </div>
@@ -108,15 +114,15 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div id="tabs-bar" class="tabs">
     <button class="tab active" data-tab="overview">Overview</button>
     <button class="tab" data-tab="content">Content</button>
-    <button class="tab" data-tab="features">Features & Nudge</button>
-    <button class="tab" data-tab="funnel">Engagement Funnel</button>
+    <button class="tab" data-tab="insights">Insights</button>
+    <button class="tab" data-tab="engagement">Engagement</button>
   </div>
 
   <!-- Tab Panels -->
   <div id="tab-overview"></div>
-  <div id="tab-funnel" class="hidden"></div>
   <div id="tab-content" class="hidden"></div>
-  <div id="tab-features" class="hidden"></div>
+  <div id="tab-insights" class="hidden"></div>
+  <div id="tab-engagement" class="hidden"></div>
 
   <div class="footer" id="footer">CommandBar Analytics Dashboard · Powered by SiteImprove Events · SouthState Correspondent</div>
 </div>
@@ -176,12 +182,17 @@ function process(R){
   const recent=clicks.filter(c=>c.label.startsWith("Recent")).reduce((s,c)=>s+c.events,0);
   const savedNav=clicks.filter(c=>c.label.startsWith("Saved")).reduce((s,c)=>s+c.events,0);
   const blogNav=get("Click","Blog");
+  const podcastNav=get("Click","Podcast");
+  const eventsNav=get("Click","Events");
+  const otherNav=Math.max(0,clickTotal-myStuff-signup-discover-recent-savedNav-blogNav-podcastNav-eventsNav);
 
   const actionBreakdown=[
     {name:"My Stuff",value:myStuff,color:CL.navy},{name:"Share",value:shareTotal,color:CL.green},
     {name:"Signup",value:signup,color:CL.blue},{name:"Save",value:saveTotal,color:CL.gold},
     {name:"Recent Nav",value:recent,color:"#6B7280"},{name:"Saved Nav",value:savedNav,color:"#8B5CF6"},
     {name:"Discover",value:discover,color:"#0891B2"},{name:"Blog Nav",value:blogNav,color:"#D97706"},
+    {name:"Podcast Nav",value:podcastNav,color:"#7C3AED"},{name:"Events Nav",value:eventsNav,color:"#059669"},
+    {name:"Other Nav",value:otherNav,color:"#9CA3AF"},
   ].filter(f=>f.value>0).sort((a,b)=>b.value-a.value);
 
   const actionDetail=[
@@ -193,6 +204,9 @@ function process(R){
     {label:"Recent navigation",count:recent,color:"#6B7280"},
     {label:"Saved item clicks",count:savedNav,color:"#8B5CF6"},
     {label:"Blog nav",count:blogNav,color:"#D97706"},
+    {label:"Podcast nav",count:podcastNav,color:"#7C3AED"},
+    {label:"Events nav",count:eventsNav,color:"#059669"},
+    {label:"Other clicks",count:otherNav,color:"#9CA3AF"},
   ].filter(f=>f.count>0);
 
   const content={};
@@ -260,29 +274,120 @@ function render(){
   const typeColors=[CL.blue,"#8A9099",CL.gold].filter((_,i)=>[blogTotal,pageTotal,podTotal][i]>0);
   charts.type=new Chart(document.getElementById("c-type"),{type:"doughnut",data:{labels:typeLabels,datasets:[{data:typeData,backgroundColor:typeColors,borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,cutout:"55%",plugins:{legend:{position:"bottom",labels:{font:{size:11},padding:8}}}}});
 
-  // ── FUNNEL TAB ──
-  let fhtml=`<div class="cards">${card("Daily Visitors",d.dailyVisits,"Unique sessions",CL.blue)}${card("Rail Opens",d.railOpens,engRate+"% open rate",CL.gold)}${card("Total Actions",d.actionsTotal,"All interactions",CL.green)}</div>`;
-  fhtml+=`<div class="charts">`;
-  fhtml+=`<div class="chart-card" style="flex:1 1 480px"><div class="chart-title">Conversion Funnel</div>`;
+  // ── ENGAGEMENT TAB ──
+  let ehtml=`<div class="cards">${card("Daily Visitors",d.dailyVisits,d.dailyVisitors+" unique sessions",CL.blue)}${card("Rail Opens",d.railOpens,engRate+"% of visitors",CL.gold)}${card("Total Actions",d.actionsTotal,d.clickTotal+" clicks, "+d.saveTotal+" saves, "+d.shareTotal+" shares",CL.green)}${card("Nudges Shown",d.nudgeShown,d.nudgeDismiss+" dismissed",CL.navy)}</div>`;
+
+  // Conversion funnel + Feature usage
+  ehtml+=`<div class="charts">`;
+  ehtml+=`<div class="chart-card" style="flex:1 1 400px"><div class="chart-title">Conversion Funnel</div>`;
   const fSteps=funnelData;
   fSteps.forEach((step,i)=>{
     const pct=fSteps[0].v?(step.v/fSteps[0].v*100):0;
     const prev=i>0?fSteps[i-1].v:0;
     const drop=i>0&&prev>0?((1-step.v/prev)*100).toFixed(0):null;
-    fhtml+=`<div class="funnel-step"><div class="funnel-header"><span class="funnel-name">${step.l}</span><span class="funnel-val">${step.v.toLocaleString()}${drop?`<span class="funnel-drop">\u2193${drop}%</span>`:""}</span></div><div class="funnel-track"><div class="funnel-fill" style="width:${pct}%;background:${step.c}">${pct>5?`<span class="funnel-pct">${pct.toFixed(1)}%</span>`:""}</div></div></div>`;
+    ehtml+=`<div class="funnel-step"><div class="funnel-header"><span class="funnel-name">${step.l}</span><span class="funnel-val">${step.v.toLocaleString()}${drop?`<span class="funnel-drop">\u2193${drop}%</span>`:""}</span></div><div class="funnel-track"><div class="funnel-fill" style="width:${pct}%;background:${step.c}">${pct>5?`<span class="funnel-pct">${pct.toFixed(1)}%</span>`:""}</div></div></div>`;
   });
-  fhtml+=`</div>`;
-  fhtml+=`<div class="chart-card" style="flex:1 1 340px"><div class="chart-title">Actions Detail</div>`;
+  ehtml+=`</div>`;
+  ehtml+=`<div class="chart-card" style="flex:1 1 350px"><div class="chart-title">Feature Usage</div><div class="chart-wrap" style="height:${Math.max(140,d.actionBreakdown.length*28+20)}px"><canvas id="c-features"></canvas></div></div>`;
+  ehtml+=`</div>`;
+
+  // Actions detail + Nudge performance
+  ehtml+=`<div class="charts">`;
+  ehtml+=`<div class="chart-card" style="flex:1 1 400px"><div class="chart-title">Actions Detail</div>`;
   d.actionDetail.forEach(item=>{
-    fhtml+=`<div class="detail-item"><div class="detail-row"><div class="detail-left"><span class="detail-dot" style="background:${item.color}"></span><span class="detail-label">${item.label}</span></div><span class="detail-count" style="color:${item.color}">${item.count}</span></div>`;
-    if(item.items&&item.items.length)fhtml+=`<div class="detail-sub">${item.items.join("<br>")}</div>`;
-    fhtml+=`</div>`;
+    ehtml+=`<div class="detail-item"><div class="detail-row"><div class="detail-left"><span class="detail-dot" style="background:${item.color}"></span><span class="detail-label">${item.label}</span></div><span class="detail-count" style="color:${item.color}">${item.count}</span></div>`;
+    if(item.items&&item.items.length)ehtml+=`<div class="detail-sub">${item.items.join("<br>")}</div>`;
+    ehtml+=`</div>`;
   });
-  fhtml+=`</div></div>`;
+  ehtml+=`</div>`;
+  ehtml+=`<div class="chart-card" style="flex:1 1 280px"><div class="chart-title">Nudge Performance</div>`;
+  [{l:"Shown",v:d.nudgeShown,c:CL.blue},{l:"Dismissed",v:d.nudgeDismiss,c:CL.gold},{l:"Auto-closed",v:Math.max(0,d.nudgeShown-d.nudgeDismiss),c:"#8A9099"},{l:"Clicked",v:0,c:CL.green}].forEach(item=>{
+    ehtml+=`<div class="nudge-row"><div class="detail-left"><span class="detail-dot" style="background:${item.c}"></span><span style="font-size:12px">${item.l}</span></div><span style="font-size:14px;font-weight:700;color:${item.c}">${item.v}</span></div>`;
+  });
+  ehtml+=`<div style="font-size:11px;color:#8A9099;margin-top:8px;line-height:1.5">Nudge triggers after 3 visits to loan/ARC content. Resets after each cycle.</div></div>`;
+  ehtml+=`</div>`;
+
+  // Saved + Shared
+  ehtml+=`<div class="charts"><div class="chart-card" style="flex:1 1 300px"><div class="chart-title">Saved Articles</div>`;
+  if(d.saves.length)d.saves.forEach(sv=>{ehtml+=`<div class="save-item"><span class="save-dot" style="background:${CL.gold}"></span><span class="save-label">${sv.label}</span><span class="save-count">${sv.events}</span></div>`;});
+  else ehtml+=`<div style="font-size:12px;color:#8A9099">No saves this period</div>`;
+  ehtml+=`</div><div class="chart-card" style="flex:1 1 300px"><div class="chart-title">Shared Content</div>`;
+  if(d.shares.length)[...d.shares].sort((a,b)=>b.events-a.events).forEach(sh=>{ehtml+=`<div class="save-item"><span class="save-dot" style="background:${CL.green}"></span><span class="save-label">${sh.label}</span><span class="save-count">${sh.events}</span></div>`;});
+  else ehtml+=`<div style="font-size:12px;color:#8A9099">No shares this period</div>`;
+  ehtml+=`</div></div>`;
+
+  // Insights
   const dropPct=d.dailyVisits>0?((1-d.railOpens/d.dailyVisits)*100).toFixed(0):0;
   const convPct=d.railOpens>0?Math.round(d.actionsTotal/d.railOpens*100):0;
-  fhtml+=`<div class="insights"><div><strong>Funnel Analysis:</strong> Biggest drop is Daily Visitors (${d.dailyVisits}) to Rail Opens (${d.railOpens}) \u2014 ${dropPct}% drop-off. Once users open the rail, ${convPct}% take an action \u2014 strong conversion for engaged users.</div></div>`;
-  document.getElementById("tab-funnel").innerHTML=fhtml;
+  ehtml+=`<div class="insights"><div><strong>Funnel Analysis:</strong> ${d.dailyVisits} daily visitors, ${d.railOpens} opened the rail (${engRate}%). Once engaged, ${convPct}% took an action. ${d.nudgeShown} nudges shown${d.nudgeDismiss>0?", "+d.nudgeDismiss+" dismissed":""}. ${d.saveTotal+d.shareTotal>0?(d.saveTotal+d.shareTotal)+" saves/shares indicate content is being distributed to peers.":"No saves or shares yet."}</div></div>`;
+  document.getElementById("tab-engagement").innerHTML=ehtml;
+
+  const ab=d.actionBreakdown;
+  charts.features=new Chart(document.getElementById("c-features"),{type:"bar",data:{labels:ab.map(a=>a.name),datasets:[{data:ab.map(a=>a.value),backgroundColor:ab.map(a=>a.color),borderRadius:6}]},options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099"}},y:{grid:{display:false},ticks:{font:{size:11},color:"#4C4C4C"}}}}});
+  // ── INSIGHTS TAB ──
+  const matrixArticles=d.articles.filter(a=>a.total>=1);
+  const avgTotal=matrixArticles.length?matrixArticles.reduce((s,a)=>s+a.total,0)/matrixArticles.length:1;
+  const avgEng=matrixArticles.length?matrixArticles.reduce((s,a)=>s+a.engPct,0)/matrixArticles.length:50;
+  const quadrants={promote:[],optimize:[],monitor:[],review:[]};
+  matrixArticles.forEach(a=>{
+    if(a.total>=avgTotal&&a.engPct>=avgEng)quadrants.promote.push(a);
+    else if(a.total>=avgTotal&&a.engPct<avgEng)quadrants.optimize.push(a);
+    else if(a.total<avgTotal&&a.engPct>=avgEng)quadrants.monitor.push(a);
+    else quadrants.review.push(a);
+  });
+
+  let ihtml=`<div class="cards">${card("Articles Tracked",matrixArticles.length,"Across all content types")}${card("Avg Events",avgTotal.toFixed(1),"Per article",CL.blue)}${card("Avg Engagement",Math.round(avgEng)+"%","Engaged rate",CL.gold)}${card("Hidden Gems",quadrants.monitor.length,"Low traffic, high engagement",CL.green)}</div>`;
+
+  // Scatter plot
+  ihtml+=`<div class="charts"><div class="chart-card" style="flex:1 1 600px"><div class="chart-title">Content Performance Matrix</div><div style="font-size:11px;color:#8A9099;margin:-6px 0 10px">X = Total Events &nbsp;&middot;&nbsp; Y = Engagement % &nbsp;&middot;&nbsp; Dashed lines = averages</div><div class="chart-wrap" style="height:300px"><canvas id="c-matrix"></canvas></div></div></div>`;
+
+  // Quadrant cards
+  ihtml+=`<div class="charts">`;
+  const quads=[
+    {key:"promote",icon:"\u2B50",title:"Stars",sub:"High traffic + high engagement \u2014 promote and replicate",color:CL.blue,bg:CL.blue+"0A"},
+    {key:"optimize",icon:"\u26A0",title:"Needs Work",sub:"High traffic but low engagement \u2014 improve content quality or relevance",color:CL.gold,bg:CL.gold+"14"},
+    {key:"monitor",icon:"\uD83D\uDC8E",title:"Hidden Gems",sub:"Low traffic but high engagement \u2014 boost distribution",color:CL.green,bg:CL.green+"0A"},
+    {key:"review",icon:"\uD83D\uDD0D",title:"Review",sub:"Low traffic + low engagement \u2014 refresh, repurpose, or retire",color:CL.red,bg:CL.red+"0A"},
+  ];
+  quads.forEach(q=>{
+    const items=quadrants[q.key];
+    ihtml+=`<div class="chart-card" style="flex:1 1 220px;border-left:3px solid ${q.color};background:${q.bg}"><div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><span style="font-size:16px">${q.icon}</span><span style="font-size:13px;font-weight:700;color:${q.color}">${q.title} (${items.length})</span></div><div style="font-size:11px;color:#8A9099;margin-bottom:8px;line-height:1.4">${q.sub}</div>`;
+    if(items.length>0){
+      items.sort((a,b)=>b.total-a.total).slice(0,5).forEach(a=>{
+        const tc=a.type==="Blog"?CL.blue:a.type==="Podcast"?CL.gold:"#8A9099";
+        ihtml+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(0,0,0,.04)"><span style="font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:6px">${trunc(a.title,35)}</span><div style="display:flex;align-items:center;gap:6px;flex-shrink:0"><span class="type-tag" style="background:${tc}14;color:${tc};font-size:9px;padding:1px 6px">${a.type}</span><span style="font-size:11px;font-weight:600;color:#002D72">${a.total}</span><span style="font-size:11px;color:${a.engPct>=50?CL.blue:a.engPct>0?CL.gold:CL.red};font-weight:600">${a.engPct}%</span></div></div>`;
+      });
+      if(items.length>5)ihtml+=`<div style="font-size:10px;color:#8A9099;margin-top:4px">+${items.length-5} more</div>`;
+    } else {
+      ihtml+=`<div style="font-size:11px;color:#8A9099">None this period</div>`;
+    }
+    ihtml+=`</div>`;
+  });
+  ihtml+=`</div>`;
+
+  // Recommendations
+  const topStar=quadrants.promote.sort((a,b)=>b.total-a.total)[0];
+  const topGem=quadrants.monitor.sort((a,b)=>b.engPct-a.engPct)[0];
+  const topFix=quadrants.optimize.sort((a,b)=>b.total-a.total)[0];
+  let recs=[];
+  if(topStar)recs.push(`<strong>Top performer:</strong> "${trunc(topStar.title,45)}" \u2014 ${topStar.total} events, ${topStar.engPct}% engaged. Consider creating follow-up content on this topic.`);
+  if(topGem)recs.push(`<strong>Hidden gem:</strong> "${trunc(topGem.title,45)}" \u2014 ${topGem.engPct}% engagement but only ${topGem.total} events. Boost visibility via newsletter, social, or CommandBar featured content.`);
+  if(topFix)recs.push(`<strong>Needs attention:</strong> "${trunc(topFix.title,45)}" \u2014 ${topFix.total} events but only ${topFix.engPct}% engaged. Review content length, structure, or title match to content.`);
+  if(recs.length===0)recs.push("Import data with content engagement events to see actionable recommendations.");
+  ihtml+=`<div class="insights"><h3>Recommendations</h3><div>${recs.map(r=>"<div style=\"margin-bottom:6px\">"+r+"</div>").join("")}</div></div>`;
+
+  document.getElementById("tab-insights").innerHTML=ihtml;
+
+  // Matrix scatter chart
+  if(matrixArticles.length>0){
+    const colors={Blog:CL.blue,Page:"#8A9099",Podcast:CL.gold};
+    const types=[...new Set(matrixArticles.map(a=>a.type))];
+    const datasets=types.map(t=>{
+      const items=matrixArticles.filter(a=>a.type===t);
+      return{label:t,data:items.map(a=>({x:a.total,y:a.engPct,title:a.title})),backgroundColor:colors[t]||"#8A9099",pointRadius:items.map(a=>Math.max(4,Math.min(12,a.total*1.5))),pointHoverRadius:8};
+    });
+    charts.matrix=new Chart(document.getElementById("c-matrix"),{type:"scatter",data:{datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{font:{size:11},padding:8}},tooltip:{callbacks:{label:function(ctx){const p=ctx.raw;return p.title+" ("+p.x+" events, "+p.y+"% engaged)"}}}},scales:{x:{title:{display:true,text:"Total Events",font:{size:11},color:"#8A9099"},grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099"},min:0},y:{title:{display:true,text:"Engagement %",font:{size:11},color:"#8A9099"},grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099",callback:function(v){return v+"%"}},min:0,max:100}},animation:{duration:600}},plugins:[{id:"quadLines",afterDraw:function(chart){const{ctx:cx,scales:{x:xS,y:yS}}=chart;cx.save();cx.setLineDash([6,4]);cx.strokeStyle="#C0C6CE";cx.lineWidth=1;const xPx=xS.getPixelForValue(avgTotal);const yPx=yS.getPixelForValue(avgEng);cx.beginPath();cx.moveTo(xPx,yS.top);cx.lineTo(xPx,yS.bottom);cx.stroke();cx.beginPath();cx.moveTo(xS.left,yPx);cx.lineTo(xS.right,yPx);cx.stroke();cx.restore()}}]});
+  }
 
   // ── CONTENT TAB ──
   let cht=`<div class="cards">${card("Content Events",d.totalContent,d.articles.length+" pieces tracked")}${card("Engaged",d.totalEngaged,deepPct+"% of events",CL.blue)}${card("Skims",d.totalSkim,(d.totalContent?Math.round(d.totalSkim/d.totalContent*100):0)+"%",CL.gold)}${card("Bounces",d.totalBounce,(d.totalContent?Math.round(d.totalBounce/d.totalContent*100):0)+"%",CL.red)}</div>`;
@@ -338,26 +443,6 @@ function render(){
     });
   });
 
-  // ── FEATURES TAB ──
-  let fth=`<div class="cards">${card("Nudges Shown",d.nudgeShown,d.nudgeDismiss+" dismissed",CL.blue)}${card("Saves",d.saveTotal,"Articles bookmarked",CL.gold)}${card("Shares",d.shareTotal,"Peer-to-peer",CL.green)}${card("Nav Clicks",d.clickTotal,"Interactions",CL.navy)}</div>`;
-  fth+=`<div class="charts"><div class="chart-card" style="flex:1 1 350px"><div class="chart-title">Feature Usage</div><div class="chart-wrap" style="height:190px"><canvas id="c-features"></canvas></div></div>`;
-  fth+=`<div class="chart-card" style="flex:1 1 280px"><div class="chart-title">Nudge Performance</div>`;
-  [{l:"Shown",v:d.nudgeShown,c:CL.blue},{l:"Dismissed",v:d.nudgeDismiss,c:CL.gold},{l:"Auto-closed",v:Math.max(0,d.nudgeShown-d.nudgeDismiss),c:"#8A9099"},{l:"Clicked",v:0,c:CL.green}].forEach(item=>{
-    fth+=`<div class="nudge-row"><div class="detail-left"><span class="detail-dot" style="background:${item.c}"></span><span style="font-size:12px">${item.l}</span></div><span style="font-size:14px;font-weight:700;color:${item.c}">${item.v}</span></div>`;
-  });
-  fth+=`<div style="font-size:11px;color:#8A9099;margin-top:8px;line-height:1.5">Nudge triggers after 3 visits to loan/ARC content. Resets after each cycle.</div></div></div>`;
-
-  fth+=`<div class="charts"><div class="chart-card" style="flex:1 1 300px"><div class="chart-title">Saved Articles</div>`;
-  if(d.saves.length)d.saves.forEach(sv=>{fth+=`<div class="save-item"><span class="save-dot" style="background:${CL.gold}"></span><span class="save-label">${sv.label}</span><span class="save-count">${sv.events}</span></div>`;});
-  else fth+=`<div style="font-size:12px;color:#8A9099">No saves this period</div>`;
-  fth+=`</div><div class="chart-card" style="flex:1 1 300px"><div class="chart-title">Shared Content</div>`;
-  if(d.shares.length)[...d.shares].sort((a,b)=>b.events-a.events).forEach(sh=>{fth+=`<div class="save-item"><span class="save-dot" style="background:${CL.green}"></span><span class="save-label">${sh.label}</span><span class="save-count">${sh.events}</span></div>`;});
-  else fth+=`<div style="font-size:12px;color:#8A9099">No shares this period</div>`;
-  fth+=`</div></div>`;
-  document.getElementById("tab-features").innerHTML=fth;
-
-  const ab=d.actionBreakdown;
-  charts.features=new Chart(document.getElementById("c-features"),{type:"bar",data:{labels:ab.map(a=>a.name),datasets:[{data:ab.map(a=>a.value),backgroundColor:ab.map(a=>a.color),borderRadius:6}]},options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099"}},y:{grid:{display:false},ticks:{font:{size:11},color:"#4C4C4C"}}}}});
 }
 
 // ── TABS ──
@@ -366,7 +451,7 @@ document.querySelectorAll("#tabs-bar .tab").forEach(btn=>{
     document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
     btn.classList.add("active");
     currentTab=btn.dataset.tab;
-    ["overview","funnel","content","features"].forEach(t=>{
+    ["overview","content","insights","engagement"].forEach(t=>{
       document.getElementById("tab-"+t).classList.toggle("hidden",t!==currentTab);
     });
   });
@@ -396,6 +481,92 @@ document.getElementById("csv-input").addEventListener("change",function(e){
   reader.readAsText(file,"utf-16");
   this.value="";
 });
+
+// ── EXPORT PDF ──
+async function exportPDF(){
+  const btn=document.getElementById("export-btn");
+  const origText=btn.innerHTML;
+  btn.innerHTML="Generating...";btn.style.opacity=".6";btn.style.pointerEvents="none";
+
+  const {jsPDF}=window.jspdf;
+  const pdf=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
+  const pw=pdf.internal.pageSize.getWidth();
+  const ph=pdf.internal.pageSize.getHeight();
+  const margin=12;
+  const contentW=pw-margin*2;
+
+  // Helper: draw branded header on each page
+  function drawHeader(pageTitle){
+    pdf.setFillColor(0,45,114);
+    pdf.rect(0,0,pw,18,{style:"F"});
+    pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);
+    pdf.text("CommandBar Analytics",margin,12);
+    pdf.setFont("helvetica","normal");pdf.setFontSize(9);
+    pdf.text((PERIOD?PERIOD+" \u00b7 ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});
+    pdf.setFillColor(9,96,187);
+    pdf.rect(0,18,pw,6,{style:"F"});
+    pdf.setFont("helvetica","bold");pdf.setFontSize(8);pdf.setTextColor(255,255,255);
+    pdf.text(pageTitle.toUpperCase(),margin,22.5);
+    pdf.setTextColor(0,0,0);
+  }
+
+  // Helper: draw footer
+  function drawFooter(pageNum,totalPages){
+    pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);
+    pdf.text("CommandBar Analytics Dashboard \u00b7 Powered by SiteImprove Events",margin,ph-5);
+    pdf.text("Page "+pageNum+" of "+totalPages,pw-margin,ph-5,{align:"right"});
+  }
+
+  // Capture each tab as image
+  const tabs=["overview","content","insights","engagement"];
+  const tabNames=["Overview","Content","Insights","Engagement"];
+  const savedTab=currentTab;
+  const images=[];
+
+  for(let i=0;i<tabs.length;i++){
+    // Show this tab
+    tabs.forEach(t=>{document.getElementById("tab-"+t).classList.toggle("hidden",t!==tabs[i])});
+    // Wait for charts to render
+    await new Promise(r=>setTimeout(r,400));
+    const el=document.getElementById("tab-"+tabs[i]);
+    try{
+      const canvas=await html2canvas(el,{scale:2,backgroundColor:"#F5F7FA",useCORS:true,logging:false});
+      images.push(canvas.toDataURL("image/png"));
+    }catch(e){images.push(null);}
+  }
+
+  // Restore original tab
+  tabs.forEach(t=>{document.getElementById("tab-"+t).classList.toggle("hidden",t!==savedTab)});
+
+  // Build PDF pages
+  const totalPages=images.filter(im=>im).length;
+  let pageNum=0;
+  for(let i=0;i<images.length;i++){
+    if(!images[i])continue;
+    if(pageNum>0)pdf.addPage();
+    pageNum++;
+    drawHeader(tabNames[i]);
+    drawFooter(pageNum,totalPages);
+
+    // Fit image into available space
+    const img=new Image();
+    img.src=images[i];
+    await new Promise(r=>{img.onload=r});
+    const availH=ph-30-10; // below header, above footer
+    const ratio=img.width/img.height;
+    let imgW=contentW;
+    let imgH=imgW/ratio;
+    if(imgH>availH){imgH=availH;imgW=imgH*ratio;}
+    const xOff=margin+(contentW-imgW)/2;
+    pdf.addImage(images[i],"PNG",xOff,28,imgW,imgH);
+  }
+
+  // Download
+  const filename="CommandBar-Analytics"+(PERIOD?"-"+PERIOD.replace(/[^a-zA-Z0-9]/g,"-"):"")+".pdf";
+  pdf.save(filename);
+
+  btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";
+}
 
 // ── INIT ──
 render();
