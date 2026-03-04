@@ -124,7 +124,7 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div id="tab-insights" class="hidden"></div>
   <div id="tab-engagement" class="hidden"></div>
 
-  <div class="footer" id="footer">CommandBar Analytics Dashboard v1.2 · Powered by SiteImprove Events · SouthState Correspondent</div>
+  <div class="footer" id="footer">CommandBar Analytics Dashboard v1.2.1 · Powered by SiteImprove Events · SouthState Correspondent</div>
 </div>
 
 <script>
@@ -504,7 +504,7 @@ async function exportPDF(){
       pdf.setFillColor(0,45,114);
       pdf.rect(0,0,pw,18,"F");
       pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);
-      pdf.text("CommandBar Analytics v1.2",margin,12);
+      pdf.text("CommandBar Analytics v1.2.1",margin,12);
       pdf.setFont("helvetica","normal");pdf.setFontSize(9);
       pdf.text((PERIOD?PERIOD+" \u00b7 ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});
       pdf.setFillColor(9,96,187);
@@ -515,131 +515,135 @@ async function exportPDF(){
     }
     function drawFooter(n){
       pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);
-      pdf.text("CommandBar Analytics Dashboard v1.2 \u00b7 SiteImprove Events",margin,ph-5);
+      pdf.text("CommandBar Analytics Dashboard v1.2.1 \u00b7 SiteImprove Events",margin,ph-5);
       pdf.text("Page "+n,pw-margin,ph-5,{align:"right"});
     }
 
-    // Helper: add a screenshot page (single or multi-page)
-    function addImagePages(imgData,canvasW,canvasH,tabName){
-      const imgW=contentW;
-      const totalImgH=(canvasH/canvasW)*contentW;
-      if(totalImgH<=availH){
-        if(pageCount>0)pdf.addPage();
-        pageCount++;drawHeader(tabName,false);drawFooter(pageCount);
-        pdf.addImage(imgData,"JPEG",margin,headerH,imgW,totalImgH);
-      }else{
-        const pxPerMM=canvasW/contentW;
-        const stripPx=availH*pxPerMM;
-        const numStrips=Math.ceil(canvasH/stripPx);
-        // Need original canvas for slicing — store it
-        const tmpImg=new Image();tmpImg.src=imgData;
-        for(let s=0;s<numStrips;s++){
-          if(pageCount>0)pdf.addPage();
-          pageCount++;drawHeader(tabName,s>0);drawFooter(pageCount);
-          const sy=s*stripPx;
-          const sh=Math.min(stripPx,canvasH-sy);
-          const strip=document.createElement("canvas");
-          strip.width=canvasW;strip.height=sh;
-          const ctx=strip.getContext("2d");
-          ctx.drawImage(tmpImg,0,sy,canvasW,sh,0,0,canvasW,sh);
-          pdf.addImage(strip.toDataURL("image/jpeg",0.92),"JPEG",margin,headerH,imgW,sh/pxPerMM);
-        }
-      }
+    function addPage(title,contd){
+      if(pageCount>0)pdf.addPage();
+      pageCount++;
+      drawHeader(title,contd||false);
+      drawFooter(pageCount);
     }
 
-    // Helper: draw native table in PDF
-    function drawContentTable(articles,tabName){
-      const colDefs=[
-        {label:"TITLE",width:contentW*0.42,align:"left"},
-        {label:"TYPE",width:contentW*0.08,align:"center"},
-        {label:"ENGAGED",width:contentW*0.09,align:"center"},
-        {label:"SKIM",width:contentW*0.09,align:"center"},
-        {label:"BOUNCE",width:contentW*0.09,align:"center"},
-        {label:"TOTAL",width:contentW*0.09,align:"center"},
-        {label:"SIGNAL",width:contentW*0.14,align:"center"},
-      ];
-      const rowH=6.5;
+    // Capture a DOM element as image and add to PDF (single page, scale to fit)
+    async function captureAndAdd(el,tabName){
+      const canvas=await html2canvas(el,{scale:2,backgroundColor:"#F5F7FA",useCORS:true,logging:false,windowWidth:980});
+      const imgData=canvas.toDataURL("image/jpeg",0.92);
+      const imgW=contentW;
+      const imgH=(canvas.height/canvas.width)*contentW;
+      const finalH=Math.min(imgH,availH);
+      const finalW=imgH>availH?(availH/imgH)*imgW:imgW;
+      const xOff=margin+(contentW-finalW)/2;
+      addPage(tabName);
+      pdf.addImage(imgData,"JPEG",xOff,headerH,finalW,finalH);
+    }
+
+    // Draw native content table (top 15)
+    function drawContentTable(){
+      addPage("Content",true);
+      const d=process(RAW_DATA);
+      const sortedArticles=[...d.articles].sort((a,b)=>{
+        const f=contentSortField,dir=contentSortDir;
+        if(f==="title"||f==="type"){const av=(a[f]||"").toLowerCase(),bv=(b[f]||"").toLowerCase();return dir==="asc"?av.localeCompare(bv):bv.localeCompare(av);}
+        return dir==="asc"?(a[f]||0)-(b[f]||0):(b[f]||0)-(a[f]||0);
+      });
+      const rows=sortedArticles.slice(0,15);
+      const rowH=7;
       const headH=8;
-      let y=headerH;
 
-      function newTablePage(contd){
-        if(pageCount>0)pdf.addPage();
-        pageCount++;drawHeader(tabName,contd);drawFooter(pageCount);
-        y=headerH;
-        // Draw table header
-        pdf.setFillColor(245,247,250);
-        pdf.rect(margin,y,contentW,headH,"F");
-        pdf.setFont("helvetica","bold");pdf.setFontSize(7);pdf.setTextColor(138,144,153);
-        let x=margin;
-        colDefs.forEach(c=>{
-          const tx=c.align==="left"?x+2:x+c.width/2;
-          pdf.text(c.label,tx,y+5.5,{align:c.align==="left"?"left":"center"});
-          x+=c.width;
-        });
-        y+=headH;
-        // Header line
-        pdf.setDrawColor(232,236,240);pdf.setLineWidth(0.3);
-        pdf.line(margin,y,margin+contentW,y);
-        y+=1;
-      }
+      // Column layout
+      const cols=[
+        {label:"TITLE",w:contentW*0.42,a:"left"},
+        {label:"TYPE",w:contentW*0.08,a:"center"},
+        {label:"ENGAGED",w:contentW*0.10,a:"center"},
+        {label:"SKIM",w:contentW*0.10,a:"center"},
+        {label:"BOUNCE",w:contentW*0.10,a:"center"},
+        {label:"TOTAL",w:contentW*0.10,a:"center"},
+        {label:"SIGNAL",w:contentW*0.10,a:"center"},
+      ];
 
-      newTablePage(true);
+      let y=headerH+2;
 
-      articles.forEach((a,idx)=>{
-        if(y+rowH>ph-footerH-2){newTablePage(true);}
+      // Table title
+      pdf.setFont("helvetica","bold");pdf.setFontSize(10);pdf.setTextColor(0,45,114);
+      pdf.text("Top "+rows.length+" Content by Performance",margin,y+4);
+      y+=10;
 
-        // Zebra stripe
-        if(idx%2===1){pdf.setFillColor(250,251,252);pdf.rect(margin,y-0.5,contentW,rowH,"F");}
+      // Header row
+      pdf.setFillColor(0,45,114);
+      pdf.rect(margin,y,contentW,headH,"F");
+      pdf.setFont("helvetica","bold");pdf.setFontSize(7.5);pdf.setTextColor(255,255,255);
+      let x=margin;
+      cols.forEach(c=>{
+        const tx=c.a==="left"?x+3:x+c.w/2;
+        pdf.text(c.label,tx,y+5.5,{align:c.a==="left"?"left":"center"});
+        x+=c.w;
+      });
+      y+=headH;
 
-        let x=margin;
+      // Data rows
+      rows.forEach((a,idx)=>{
+        // Zebra
+        if(idx%2===0){pdf.setFillColor(248,249,252);pdf.rect(margin,y,contentW,rowH,"F");}
+
+        x=margin;
+
         // Title
         pdf.setFont("helvetica","normal");pdf.setFontSize(8);pdf.setTextColor(26,26,46);
-        const titleTxt=a.title.length>65?a.title.slice(0,64)+"\u2026":a.title;
-        pdf.text(titleTxt,x+2,y+4);
-        x+=colDefs[0].width;
+        const t=a.title.length>60?a.title.slice(0,59)+"\u2026":a.title;
+        pdf.text(t,x+3,y+4.8);
+        x+=cols[0].w;
 
         // Type
-        const tc=a.type==="Blog"?[9,96,187]:a.type==="Podcast"?[255,191,63]:[138,144,153];
-        pdf.setFont("helvetica","bold");pdf.setFontSize(7);pdf.setTextColor(tc[0],tc[1],tc[2]);
-        pdf.text(a.type,x+colDefs[1].width/2,y+4,{align:"center"});
-        x+=colDefs[1].width;
+        const tc=a.type==="Blog"?[9,96,187]:a.type==="Podcast"?[180,140,20]:[138,144,153];
+        pdf.setFont("helvetica","bold");pdf.setFontSize(7.5);pdf.setTextColor(tc[0],tc[1],tc[2]);
+        pdf.text(a.type,x+cols[1].w/2,y+4.8,{align:"center"});
+        x+=cols[1].w;
 
         // Engaged
-        pdf.setFont("helvetica","bold");pdf.setFontSize(8);
-        if(a.engaged){pdf.setTextColor(9,96,187);pdf.text(String(a.engaged),x+colDefs[2].width/2,y+4,{align:"center"});}
-        else{pdf.setTextColor(208,213,221);pdf.text("\u2013",x+colDefs[2].width/2,y+4,{align:"center"});}
-        x+=colDefs[2].width;
+        pdf.setFont("helvetica","bold");pdf.setFontSize(8.5);
+        if(a.engaged){pdf.setTextColor(9,96,187);pdf.text(String(a.engaged),x+cols[2].w/2,y+4.8,{align:"center"});}
+        else{pdf.setTextColor(208,213,221);pdf.text("\u2013",x+cols[2].w/2,y+4.8,{align:"center"});}
+        x+=cols[2].w;
 
         // Skim
-        if(a.skim){pdf.setTextColor(212,160,23);pdf.text(String(a.skim),x+colDefs[3].width/2,y+4,{align:"center"});}
-        else{pdf.setTextColor(208,213,221);pdf.text("\u2013",x+colDefs[3].width/2,y+4,{align:"center"});}
-        x+=colDefs[3].width;
+        if(a.skim){pdf.setTextColor(212,160,23);pdf.text(String(a.skim),x+cols[3].w/2,y+4.8,{align:"center"});}
+        else{pdf.setTextColor(208,213,221);pdf.text("\u2013",x+cols[3].w/2,y+4.8,{align:"center"});}
+        x+=cols[3].w;
 
         // Bounce
-        if(a.bounce){pdf.setTextColor(229,57,53);pdf.text(String(a.bounce),x+colDefs[4].width/2,y+4,{align:"center"});}
-        else{pdf.setTextColor(208,213,221);pdf.text("\u2013",x+colDefs[4].width/2,y+4,{align:"center"});}
-        x+=colDefs[4].width;
+        if(a.bounce){pdf.setTextColor(229,57,53);pdf.text(String(a.bounce),x+cols[4].w/2,y+4.8,{align:"center"});}
+        else{pdf.setTextColor(208,213,221);pdf.text("\u2013",x+cols[4].w/2,y+4.8,{align:"center"});}
+        x+=cols[4].w;
 
         // Total
         pdf.setFont("helvetica","bold");pdf.setTextColor(0,45,114);
-        pdf.text(String(a.total),x+colDefs[5].width/2,y+4,{align:"center"});
-        x+=colDefs[5].width;
+        pdf.text(String(a.total),x+cols[5].w/2,y+4.8,{align:"center"});
+        x+=cols[5].w;
 
         // Signal
-        const sigColor=a.engPct>=50?[9,96,187]:a.engPct>0?[255,191,63]:[229,57,53];
-        const sigLabel=a.engPct>=50?"Strong":a.engPct>0?"Mixed":"Weak";
-        pdf.setFont("helvetica","bold");pdf.setFontSize(7);
-        pdf.setTextColor(sigColor[0],sigColor[1],sigColor[2]);
-        pdf.text(sigLabel,x+colDefs[6].width/2,y+4,{align:"center"});
+        const sc=a.engPct>=50?[9,96,187]:a.engPct>0?[212,160,23]:[229,57,53];
+        const sl=a.engPct>=50?"Strong":a.engPct>0?"Mixed":"Weak";
+        pdf.setFontSize(7.5);pdf.setTextColor(sc[0],sc[1],sc[2]);
+        pdf.text(sl,x+cols[6].w/2,y+4.8,{align:"center"});
 
         // Row line
-        pdf.setDrawColor(240,242,245);pdf.setLineWidth(0.15);
-        pdf.line(margin,y+rowH-0.5,margin+contentW,y+rowH-0.5);
+        pdf.setDrawColor(232,236,240);pdf.setLineWidth(0.2);
+        pdf.line(margin,y+rowH,margin+contentW,y+rowH);
 
         y+=rowH;
       });
+
+      // Show count note if truncated
+      if(sortedArticles.length>rows.length){
+        y+=4;
+        pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);
+        pdf.text("Showing top "+rows.length+" of "+sortedArticles.length+" total articles. Full data available in the interactive dashboard.",margin,y);
+      }
     }
 
+    // ── Capture tabs ──
     const tabs=["overview","content","insights","engagement"];
     const tabNames=["Overview","Content","Insights","Engagement"];
     const savedTab=currentTab;
@@ -653,23 +657,12 @@ async function exportPDF(){
       await new Promise(r=>setTimeout(r,600));
 
       if(tabs[i]==="content"){
-        // Content tab: capture charts section as screenshot
-        const chartsEl=document.getElementById("content-charts");
-        const chartsCanvas=await html2canvas(chartsEl,{scale:2,backgroundColor:"#F5F7FA",useCORS:true,logging:false,windowWidth:980});
-        addImagePages(chartsCanvas.toDataURL("image/jpeg",0.92),chartsCanvas.width,chartsCanvas.height,"Content");
-
-        // Content tab: build table natively in PDF
-        const d=process(RAW_DATA);
-        const sortedArticles=[...d.articles].sort((a,b)=>{
-          const f=contentSortField,dir=contentSortDir;
-          if(f==="title"||f==="type"){const av=(a[f]||"").toLowerCase(),bv=(b[f]||"").toLowerCase();return dir==="asc"?av.localeCompare(bv):bv.localeCompare(av);}
-          return dir==="asc"?(a[f]||0)-(b[f]||0):(b[f]||0)-(a[f]||0);
-        });
-        drawContentTable(sortedArticles,"Content");
+        // Page 1: charts screenshot
+        await captureAndAdd(document.getElementById("content-charts"),"Content");
+        // Page 2: native table
+        drawContentTable();
       }else{
-        const el=document.getElementById("tab-"+tabs[i]);
-        const canvas=await html2canvas(el,{scale:2,backgroundColor:"#F5F7FA",useCORS:true,logging:false,windowWidth:980});
-        addImagePages(canvas.toDataURL("image/jpeg",0.92),canvas.width,canvas.height,tabNames[i]);
+        await captureAndAdd(document.getElementById("tab-"+tabs[i]),tabNames[i]);
       }
     }
 
@@ -680,15 +673,13 @@ async function exportPDF(){
       el.classList.toggle("hidden",t!==savedTab);
     });
 
-    const fn="CommandBar-Analytics"+(PERIOD?"-"+PERIOD.replace(/[^a-zA-Z0-9]+/g,"-"):"")+".pdf";
-    pdf.save(fn);
+    pdf.save("CommandBar-Analytics"+(PERIOD?"-"+PERIOD.replace(/[^a-zA-Z0-9]+/g,"-"):"")+".pdf");
 
   }catch(err){
     console.error("PDF export error:",err);
     document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>PDF export failed: '+err.message+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
     ["overview","content","insights","engagement"].forEach(t=>{
-      const el=document.getElementById("tab-"+t);
-      el.style.display="";
+      const el=document.getElementById("tab-"+t);el.style.display="";
       el.classList.toggle("hidden",t!==currentTab);
     });
   }
