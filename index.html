@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CommandBar Analytics Dashboard v1.2.1</title>
+<title>CommandBar Analytics Dashboard v1.4.1</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -96,15 +96,22 @@ tbody tr:nth-child(even){background:#FAFBFC}
       <div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
       <div><div class="title">CommandBar Analytics</div><div class="subtitle" id="period-label">SouthState Correspondent</div></div>
     </div>
-    <div style="display:flex;gap:8px">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input type="date" id="date-from" style="padding:6px 10px;border-radius:8px;border:1px solid #E8ECF0;font-size:12px;font-family:inherit;color:#1A1A2E">
+      <span style="font-size:11px;color:#8A9099">to</span>
+      <input type="date" id="date-to" style="padding:6px 10px;border-radius:8px;border:1px solid #E8ECF0;font-size:12px;font-family:inherit;color:#1A1A2E">
+      <button class="import-btn" id="fetch-btn" onclick="fetchAPI()" style="background:#2E7D32">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+        Fetch
+      </button>
       <input type="file" id="csv-input" accept=".csv,.tsv,.txt" style="display:none">
-      <button class="import-btn" onclick="document.getElementById('csv-input').click()">
+      <button class="import-btn" onclick="document.getElementById('csv-input').click()" style="background:#8A9099">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        Import CSV
+        CSV
       </button>
       <button class="import-btn" id="export-btn" onclick="exportPDF()" style="background:#0960BB">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Export PDF
+        PDF
       </button>
     </div>
   </div>
@@ -116,6 +123,7 @@ tbody tr:nth-child(even){background:#FAFBFC}
     <button class="tab" data-tab="content">Content</button>
     <button class="tab" data-tab="insights">Insights</button>
     <button class="tab" data-tab="engagement">Engagement</button>
+    <button class="tab" data-tab="historical">Historical</button>
   </div>
 
   <!-- Tab Panels -->
@@ -123,8 +131,9 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div id="tab-content" class="hidden"></div>
   <div id="tab-insights" class="hidden"></div>
   <div id="tab-engagement" class="hidden"></div>
+  <div id="tab-historical" class="hidden"></div>
 
-  <div class="footer" id="footer">CommandBar Analytics Dashboard v1.2.1 · Powered by SiteImprove Events · SouthState Correspondent</div>
+  <div class="footer" id="footer">CommandBar Analytics Dashboard v1.4.1 · Powered by SiteImprove Events · SouthState Correspondent</div>
 </div>
 
 <script>
@@ -443,19 +452,373 @@ function render(){
     });
   });
 
+  // ── HISTORICAL TAB ──
+  var hhtml='<div class="charts"><div class="chart-card" style="flex:1 1 100%">';
+  hhtml+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">';
+  hhtml+='<div class="chart-title" style="margin-bottom:0">Traffic Trends</div>';
+  hhtml+='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">';
+  // Build metric options from available data
+  var histMetrics=["Impression","Daily Visit"];
+  hhtml+='<select id="hist-m1" style="padding:4px 8px;border-radius:6px;border:1px solid #E8ECF0;font-size:11px;font-family:inherit">';
+  histMetrics.forEach(function(m){hhtml+='<option value="'+m+'"'+(m==="Impression"?' selected':'')+'>'+m+'</option>';});
+  hhtml+='</select>';
+  hhtml+='<span style="font-size:11px;color:#8A9099">vs</span>';
+  hhtml+='<select id="hist-m2" style="padding:4px 8px;border-radius:6px;border:1px solid #E8ECF0;font-size:11px;font-family:inherit">';
+  histMetrics.forEach(function(m){hhtml+='<option value="'+m+'"'+(m==="Daily Visit"?' selected':'')+'>'+m+'</option>';});
+  hhtml+='</select>';
+  hhtml+='<button class="import-btn" id="hist-fetch-btn" onclick="fetchHistorical()" style="background:#2E7D32;padding:5px 12px;font-size:11px">Reload</button>';
+  hhtml+='</div></div>';
+  hhtml+='<div id="hist-status" style="font-size:11px;color:#8A9099;margin-bottom:8px"></div>';
+  hhtml+='<div class="chart-wrap" style="height:260px"><canvas id="c-hist-traffic"></canvas></div>';
+  hhtml+='</div></div>';
+
+  hhtml+='<div class="charts"><div class="chart-card" style="flex:1 1 100%">';
+  hhtml+='<div class="chart-title">CommandBar Widget Interactions</div>';
+  hhtml+='<div class="chart-wrap" style="height:220px"><canvas id="c-hist-widget"></canvas></div>';
+  hhtml+='</div></div>';
+
+  hhtml+='<div class="charts"><div class="chart-card" style="flex:1 1 100%">';
+  hhtml+='<div class="chart-title">Individual Widget Interactions</div>';
+  hhtml+='<div class="chart-wrap" style="height:220px"><canvas id="c-hist-detail"></canvas></div>';
+  hhtml+='</div></div>';
+
+  hhtml+='<div id="hist-insights"></div>';
+
+  document.getElementById("tab-historical").innerHTML=hhtml;
+
+  // Re-render charts if data already loaded and selectors change
+  var m1El=document.getElementById("hist-m1");
+  var m2El=document.getElementById("hist-m2");
+  if(m1El)m1El.addEventListener("change",function(){if(histData)renderHistoricalCharts()});
+  if(m2El)m2El.addEventListener("change",function(){if(histData)renderHistoricalCharts()});
+  // If data already loaded, render charts
+  if(histData)setTimeout(renderHistoricalCharts,100);
 }
 
-// ── TABS ──
+// ── HISTORICAL FETCH ──
+var histData=null;
+var histTopContent=[];
+
+function rebuildHistSelectors(){
+  var selects=["hist-m1","hist-m2"];
+  var defaults=["Impression","Daily Visit"];
+  selects.forEach(function(id,idx){
+    var el=document.getElementById(id);
+    if(!el)return;
+    var current=el.value||defaults[idx];
+    var baseMetrics=["Impression","Daily Visit"];
+    var html="";
+    baseMetrics.forEach(function(m){
+      html+='<option value="'+m+'"'+(m===current?" selected":"")+'>'+m+'</option>';
+    });
+    if(histTopContent.length>0){
+      html+='<option disabled>── Top Content ──</option>';
+      histTopContent.forEach(function(t){
+        var short=t.length>45?t.slice(0,44)+"\u2026":t;
+        html+='<option value="'+t.replace(/"/g,"&quot;")+'"'+(t===current?" selected":"")+'>'+short+'</option>';
+      });
+    }
+    el.innerHTML=html;
+  });
+}
+
+async function fetchHistorical(){
+  var fromEl=document.getElementById("date-from");
+  var toEl=document.getElementById("date-to");
+  var btn=document.getElementById("hist-fetch-btn");
+  var status=document.getElementById("hist-status");
+
+  if(!fromEl.value||!toEl.value){
+    status.innerHTML='<span style="color:#E53935">Select date range in the header first.</span>';
+    return;
+  }
+
+  var from=new Date(fromEl.value+"T00:00:00");
+  var to=new Date(toEl.value+"T00:00:00");
+  if(from>to){status.innerHTML='<span style="color:#E53935">Invalid date range.</span>';return;}
+
+  var days=[];
+  var d=new Date(from);
+  while(d<=to){days.push(d.toISOString().split("T")[0]);d.setDate(d.getDate()+1);}
+
+  if(days.length>60){
+    status.innerHTML='<span style="color:#E53935">Max 60 days for daily data. Narrow the date range.</span>';
+    return;
+  }
+
+  var origText=btn.innerHTML;
+  btn.innerHTML="Loading...";btn.style.opacity=".6";btn.style.pointerEvents="none";
+  status.textContent="Fetching "+days.length+" days...";
+
+  try{
+    var dailyData=[];
+    for(var i=0;i<days.length;i++){
+      var dateStr=days[i].replace(/-/g,"");
+      status.textContent="Fetching day "+(i+1)+" of "+days.length+"...";
+      var resp=await fetch(WORKER_URL+"?period="+dateStr+"&page_size=1000");
+      var result=await resp.json();
+      var dayEvents=result.data||[];
+      var dayObj={date:days[i],_titles:{}};
+
+      // Aggregate by action and track individual content titles + click types
+      dayEvents.forEach(function(e){
+        if(!dayObj[e.action])dayObj[e.action]=0;
+        dayObj[e.action]+=e.events;
+        // Track individual content by title
+        if(["Blog","Page","Podcast"].indexOf(e.action)>-1 && e.label.indexOf(": ")>-1){
+          var title=e.label.split(": ").slice(1).join(": ");
+          var key=e.action+": "+title;
+          if(!dayObj._titles[key])dayObj._titles[key]=0;
+          dayObj._titles[key]+=e.events;
+        }
+        // Track individual click types
+        if(e.action==="Click"){
+          var clk="click_other";
+          if(e.label==="Mystuff")clk="click_mystuff";
+          else if(e.label==="Signup")clk="click_signup";
+          else if(e.label==="Blog")clk="click_blog";
+          else if(e.label==="Podcast")clk="click_podcast";
+          else if(e.label==="Events")clk="click_events";
+          else if(e.label.indexOf("Discover")===0)clk="click_discover";
+          else if(e.label.indexOf("Recent")===0)clk="click_recent";
+          else if(e.label.indexOf("Saved")===0)clk="click_saved";
+          if(!dayObj[clk])dayObj[clk]=0;
+          dayObj[clk]+=e.events;
+        }
+        // Track individual share/save items
+        if(e.action==="Share"){
+          var sk="share_"+e.label;
+          if(!dayObj[sk])dayObj[sk]=0;
+          dayObj[sk]+=e.events;
+        }
+        if(e.action==="Save"){
+          var svk="save_"+e.label;
+          if(!dayObj[svk])dayObj[svk]=0;
+          dayObj[svk]+=e.events;
+        }
+      });
+
+      dailyData.push(dayObj);
+    }
+
+    histData=dailyData;
+
+    // Build top content list from aggregated data
+    var titleTotals={};
+    histData.forEach(function(d){
+      Object.keys(d._titles).forEach(function(k){
+        if(!titleTotals[k])titleTotals[k]=0;
+        titleTotals[k]+=d._titles[k];
+      });
+    });
+    histTopContent=Object.keys(titleTotals).sort(function(a,b){return titleTotals[b]-titleTotals[a]}).slice(0,10);
+
+    status.innerHTML='<span style="color:#2E7D32">'+days.length+' days loaded successfully.</span>';
+    rebuildHistSelectors();
+    renderHistoricalCharts();
+
+  }catch(err){
+    status.innerHTML='<span style="color:#E53935">Fetch failed: '+err.message+'</span>';
+  }
+
+  btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";
+}
+
+function renderHistoricalCharts(){
+  if(!histData||!histData.length)return;
+
+  var m1=(document.getElementById("hist-m1")||{}).value||"Impression";
+  var m2=(document.getElementById("hist-m2")||{}).value||"Daily Visit";
+  var labels=histData.map(function(d){
+    var p=d.date.split("-");
+    return parseInt(p[1])+"/"+parseInt(p[2]);
+  });
+
+  // Destroy old charts
+  if(charts.histTraffic)charts.histTraffic.destroy();
+  if(charts.histWidget)charts.histWidget.destroy();
+
+  // Helper: get value for a metric key from a day object
+  function getVal(d,key){
+    // Check if it's a content title (stored in _titles)
+    if(d._titles && d._titles[key]!==undefined)return d._titles[key];
+    // Otherwise it's an action-level metric
+    return d[key]||0;
+  }
+
+  // Traffic chart
+  var m1Short=m1.length>35?m1.slice(0,34)+"\u2026":m1;
+  var m2Short=m2.length>35?m2.slice(0,34)+"\u2026":m2;
+  charts.histTraffic=new Chart(document.getElementById("c-hist-traffic"),{
+    type:"line",
+    data:{
+      labels:labels,
+      datasets:[
+        {label:m1Short,data:histData.map(function(d){return getVal(d,m1)}),borderColor:CL.blue,backgroundColor:CL.blue+"20",fill:true,tension:0.3,pointRadius:3,pointHoverRadius:5,borderWidth:2},
+        {label:m2Short,data:histData.map(function(d){return getVal(d,m2)}),borderColor:CL.gold,backgroundColor:CL.gold+"20",fill:true,tension:0.3,pointRadius:3,pointHoverRadius:5,borderWidth:2}
+      ]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{font:{size:11},padding:10}}},scales:{y:{beginAtZero:true,grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099"}},x:{grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099",maxRotation:45}}},interaction:{mode:"index",intersect:false}}
+  });
+
+  // Widget metrics chart
+  var widgetMetrics=[
+    {key:"Open",label:"Rail Opens",color:CL.navy},
+    {key:"Share",label:"Shares",color:CL.green},
+    {key:"Save",label:"Saves",color:CL.gold},
+    {key:"Nudge",label:"Nudges",color:CL.red},
+    {key:"Nudge Dismiss",label:"Nudge Dismisses",color:"#8A9099"},
+    {key:"Click",label:"Nav Clicks",color:CL.blue}
+  ];
+  charts.histWidget=new Chart(document.getElementById("c-hist-widget"),{
+    type:"line",
+    data:{
+      labels:labels,
+      datasets:widgetMetrics.map(function(m){
+        return{label:m.label,data:histData.map(function(d){return d[m.key]||0}),borderColor:m.color,backgroundColor:m.color+"10",fill:false,tension:0.3,pointRadius:2,pointHoverRadius:5,borderWidth:2};
+      })
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{font:{size:11},padding:10}}},scales:{y:{beginAtZero:true,grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099"}},x:{grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099",maxRotation:45}}},interaction:{mode:"index",intersect:false}}
+  });
+
+  // Insights
+  // Individual widget interactions chart
+  if(charts.histDetail)charts.histDetail.destroy();
+  var detailMetrics=[
+    {key:"click_mystuff",label:"My Stuff",color:CL.navy},
+    {key:"click_signup",label:"Signup",color:CL.blue},
+    {key:"click_blog",label:"Blog Nav",color:"#D97706"},
+    {key:"click_podcast",label:"Podcast Nav",color:"#7C3AED"},
+    {key:"click_events",label:"Events Nav",color:"#059669"},
+    {key:"click_discover",label:"Discover",color:"#0891B2"},
+    {key:"click_recent",label:"Recent Nav",color:"#6B7280"},
+    {key:"click_saved",label:"Saved Nav",color:"#8B5CF6"}
+  ];
+  // Only include metrics that have data
+  var activeDetail=detailMetrics.filter(function(m){
+    return histData.some(function(d){return(d[m.key]||0)>0});
+  });
+  if(activeDetail.length>0){
+    charts.histDetail=new Chart(document.getElementById("c-hist-detail"),{
+      type:"line",
+      data:{
+        labels:labels,
+        datasets:activeDetail.map(function(m){
+          return{label:m.label,data:histData.map(function(d){return d[m.key]||0}),borderColor:m.color,backgroundColor:m.color+"10",fill:false,tension:0.3,pointRadius:2,pointHoverRadius:5,borderWidth:2};
+        })
+      },
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{font:{size:11},padding:8}}},scales:{y:{beginAtZero:true,grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099",stepSize:1}},x:{grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099",maxRotation:45}}},interaction:{mode:"index",intersect:false}}
+    });
+  }
+
+  var totalM1=histData.reduce(function(s,d){return s+getVal(d,m1)},0);
+  var totalM2=histData.reduce(function(s,d){return s+getVal(d,m2)},0);
+  var peakDay=histData.reduce(function(best,d){return getVal(d,m1)>getVal(best,m1)?d:best},histData[0]);
+  var avgM1=(totalM1/histData.length).toFixed(1);
+  var avgM2=(totalM2/histData.length).toFixed(1);
+
+  var ihtml='<div class="insights"><h3>Trend Analysis</h3><div>';
+  ihtml+='<div><strong>'+m1Short+':</strong> '+totalM1+' total over '+histData.length+' days (avg '+avgM1+'/day). Peak: '+peakDay.date+' with '+getVal(peakDay,m1)+'.</div>';
+  ihtml+='<div><strong>'+m2Short+':</strong> '+totalM2+' total (avg '+avgM2+'/day).</div>';
+
+  // Simple trend direction
+  if(histData.length>=3){
+    var firstHalf=histData.slice(0,Math.floor(histData.length/2));
+    var secondHalf=histData.slice(Math.floor(histData.length/2));
+    var avg1=firstHalf.reduce(function(s,d){return s+getVal(d,m1)},0)/firstHalf.length;
+    var avg2=secondHalf.reduce(function(s,d){return s+getVal(d,m1)},0)/secondHalf.length;
+    var trendPct=avg1>0?((avg2-avg1)/avg1*100).toFixed(0):0;
+    var trendDir=trendPct>5?"trending up \u2191":trendPct<-5?"trending down \u2193":"holding steady \u2192";
+    ihtml+='<div><strong>Direction:</strong> '+m1Short+' is '+trendDir+' ('+trendPct+'% change, first half vs second half).</div>';
+  }
+
+  ihtml+='</div></div>';
+  document.getElementById("hist-insights").innerHTML=ihtml;
+}
 document.querySelectorAll("#tabs-bar .tab").forEach(btn=>{
   btn.addEventListener("click",()=>{
     document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
     btn.classList.add("active");
     currentTab=btn.dataset.tab;
-    ["overview","content","insights","engagement"].forEach(t=>{
+    ["overview","content","insights","engagement","historical"].forEach(t=>{
       document.getElementById("tab-"+t).classList.toggle("hidden",t!==currentTab);
     });
+    // Auto-load historical data when tab is opened for the first time
+    if(currentTab==="historical" && !histData){
+      setTimeout(fetchHistorical,100);
+    }
   });
 });
+
+// ── API FETCH ──
+const WORKER_URL = "https://siteimprove-proxy.jameswspence.workers.dev";
+
+async function fetchAPI(){
+  const fromEl=document.getElementById("date-from");
+  const toEl=document.getElementById("date-to");
+  const btn=document.getElementById("fetch-btn");
+
+  if(!fromEl.value||!toEl.value){
+    document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>Select both start and end dates.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
+    return;
+  }
+
+  const from=fromEl.value.replace(/-/g,"");
+  const to=toEl.value.replace(/-/g,"");
+  if(from>to){
+    document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>Start date must be before end date.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
+    return;
+  }
+
+  const origText=btn.innerHTML;
+  btn.innerHTML="Fetching...";btn.style.opacity=".6";btn.style.pointerEvents="none";
+  document.getElementById("import-msg").innerHTML="";
+
+  try{
+    const url=WORKER_URL+"?period="+from+"_"+to+"&page_size=1000";
+    const resp=await fetch(url);
+    if(!resp.ok){
+      const err=await resp.text();
+      throw new Error("API returned "+resp.status+": "+err);
+    }
+    const result=await resp.json();
+
+    if(result.error){
+      throw new Error(result.error+(result.detail?" — "+result.detail:""));
+    }
+
+    if(!result.data||result.data.length===0){
+      document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>No CommandBar events found for this date range.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
+      btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";
+      return;
+    }
+
+    RAW_DATA=result.data;
+    // Format period for display
+    const fd=fromEl.value,td=toEl.value;
+    const fmtDate=function(d){var p=d.split("-");var m=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];return m[parseInt(p[1],10)-1]+" "+parseInt(p[2],10)+", "+p[0]};
+    PERIOD=fmtDate(fd)+(fd===td?"":" \u2013 "+fmtDate(td));
+    hasData=true;
+
+    document.getElementById("import-msg").innerHTML='<div class="import-msg success"><span>'+result.data.length+' events loaded via API for '+PERIOD+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
+    render();
+
+  }catch(err){
+    console.error("API fetch error:",err);
+    document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>Fetch failed: '+err.message+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
+  }
+
+  btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";
+}
+
+// Set default date range (last 7 days)
+(function(){
+  var today=new Date();
+  var week=new Date(today);week.setDate(week.getDate()-6);
+  var fmt=function(d){return d.toISOString().split("T")[0]};
+  document.getElementById("date-from").value=fmt(week);
+  document.getElementById("date-to").value=fmt(today);
+})();
 
 // ── IMPORT ──
 document.getElementById("csv-input").addEventListener("change",function(e){
@@ -504,7 +867,7 @@ async function exportPDF(){
       pdf.setFillColor(0,45,114);
       pdf.rect(0,0,pw,18,"F");
       pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);
-      pdf.text("CommandBar Analytics v1.2.1",margin,12);
+      pdf.text("CommandBar Analytics v1.4.1",margin,12);
       pdf.setFont("helvetica","normal");pdf.setFontSize(9);
       pdf.text((PERIOD?PERIOD+" \u00b7 ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});
       pdf.setFillColor(9,96,187);
@@ -515,7 +878,7 @@ async function exportPDF(){
     }
     function drawFooter(n){
       pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);
-      pdf.text("CommandBar Analytics Dashboard v1.2.1 \u00b7 SiteImprove Events",margin,ph-5);
+      pdf.text("CommandBar Analytics Dashboard v1.4.1 \u00b7 SiteImprove Events",margin,ph-5);
       pdf.text("Page "+n,pw-margin,ph-5,{align:"right"});
     }
 
@@ -644,7 +1007,7 @@ async function exportPDF(){
     }
 
     // ── Capture tabs ──
-    const tabs=["overview","content","insights","engagement"];
+    const tabs=["overview","content","insights","engagement","historical"];
     const tabNames=["Overview","Content","Insights","Engagement"];
     const savedTab=currentTab;
 
@@ -678,7 +1041,7 @@ async function exportPDF(){
   }catch(err){
     console.error("PDF export error:",err);
     document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>PDF export failed: '+err.message+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
-    ["overview","content","insights","engagement"].forEach(t=>{
+    ["overview","content","insights","engagement","historical"].forEach(t=>{
       const el=document.getElementById("tab-"+t);el.style.display="";
       el.classList.toggle("hidden",t!==currentTab);
     });
