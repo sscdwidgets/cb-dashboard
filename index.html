@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CommandBar Analytics Dashboard v1.4.1</title>
+<title>CommandBar Analytics Dashboard v1.8.1</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -105,7 +105,7 @@ tbody tr:nth-child(even){background:#FAFBFC}
         Fetch
       </button>
       <input type="file" id="csv-input" accept=".csv,.tsv,.txt" style="display:none">
-      <button class="import-btn" onclick="document.getElementById('csv-input').click()" style="background:#8A9099">
+      <button class="import-btn" id="csv-btn" onclick="document.getElementById('csv-input').click()" style="background:#8A9099;display:none">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         CSV
       </button>
@@ -121,9 +121,10 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div id="tabs-bar" class="tabs">
     <button class="tab active" data-tab="overview">Overview</button>
     <button class="tab" data-tab="content">Content</button>
-    <button class="tab" data-tab="insights">Insights</button>
-    <button class="tab" data-tab="engagement">Engagement</button>
-    <button class="tab" data-tab="historical">Historical</button>
+    <button class="tab" data-tab="insights">Performance</button>
+    <button class="tab" data-tab="engagement">Activity</button>
+    <button class="tab" data-tab="historical">Compare</button>
+    <button class="tab" data-tab="leaderboard">Trending</button>
   </div>
 
   <!-- Tab Panels -->
@@ -132,8 +133,9 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div id="tab-insights" class="hidden"></div>
   <div id="tab-engagement" class="hidden"></div>
   <div id="tab-historical" class="hidden"></div>
+  <div id="tab-leaderboard" class="hidden"></div>
 
-  <div class="footer" id="footer">CommandBar Analytics Dashboard v1.4.1 · Powered by SiteImprove Events · SouthState Correspondent</div>
+  <div class="footer" id="footer">CommandBar Analytics Dashboard v1.8.1 · Powered by SiteImprove Events · SouthState Correspondent</div>
 </div>
 
 <script>
@@ -144,6 +146,7 @@ let hasData = false;
 let currentTab = "overview";
 let contentSortField = "total";
 let contentSortDir = "desc";
+let contentShowAll = false;
 let charts = {};
 
 const CL = {navy:"#002D72",blue:"#0960BB",gold:"#FFBF3F",red:"#E53935",grey:"#8A9099",green:"#2E7D32"};
@@ -426,7 +429,8 @@ function render(){
     if(f==="title"||f==="type"){const av=(a[f]||"").toLowerCase(),bv=(b[f]||"").toLowerCase();return dir==="asc"?av.localeCompare(bv):bv.localeCompare(av);}
     return dir==="asc"?(a[f]||0)-(b[f]||0):(b[f]||0)-(a[f]||0);
   });
-  sorted.forEach(a=>{
+  var showLimit=contentShowAll?sorted.length:25;
+  sorted.slice(0,showLimit).forEach(a=>{
     const tc=a.type==="Blog"?CL.blue:a.type==="Podcast"?CL.gold:"#8A9099";
     const bg=a.type==="Blog"?CL.blue+"14":a.type==="Podcast"?CL.gold+"14":"#8A909914";
     cht+=`<tr><td><div>${a.title}</div></td><td><span class="type-tag" style="background:${bg};color:${tc}">${a.type}</span></td>`;
@@ -435,7 +439,11 @@ function render(){
     cht+=`<td style="font-weight:600;color:${a.bounce?CL.red:"#D0D5DD"}">${a.bounce||"\u2013"}</td>`;
     cht+=`<td style="font-weight:700;color:#002D72">${a.total}</td><td>${badge(a.engPct)}</td></tr>`;
   });
-  cht+=`</tbody></table></div></div>`;
+  cht+=`</tbody></table>`;
+  if(sorted.length>25){
+    cht+=`<div style="text-align:center;padding:12px"><button id="content-show-more" style="padding:8px 24px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid #E8ECF0;background:#fff;color:#0960BB;letter-spacing:.2px">${contentShowAll?"Show Less (25)":"Show All ("+sorted.length+")"}</button></div>`;
+  }
+  cht+=`</div></div>`;
   document.getElementById("tab-content").innerHTML=cht;
 
   // Blog chart
@@ -451,34 +459,45 @@ function render(){
       render();
     });
   });
+  var showMoreBtn=document.getElementById("content-show-more");
+  if(showMoreBtn)showMoreBtn.addEventListener("click",function(){contentShowAll=!contentShowAll;render();});
 
   // ── HISTORICAL TAB ──
   var hhtml='<div class="charts"><div class="chart-card" style="flex:1 1 100%">';
   hhtml+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">';
-  hhtml+='<div class="chart-title" style="margin-bottom:0">Traffic Trends</div>';
+  hhtml+='<div class="chart-title" style="margin-bottom:0">Traffic</div>';
   hhtml+='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">';
-  // Build metric options from available data
-  var histMetrics=["Impression","Daily Visit"];
-  hhtml+='<select id="hist-m1" style="padding:4px 8px;border-radius:6px;border:1px solid #E8ECF0;font-size:11px;font-family:inherit">';
-  histMetrics.forEach(function(m){hhtml+='<option value="'+m+'"'+(m==="Impression"?' selected':'')+'>'+m+'</option>';});
-  hhtml+='</select>';
-  hhtml+='<span style="font-size:11px;color:#8A9099">vs</span>';
-  hhtml+='<select id="hist-m2" style="padding:4px 8px;border-radius:6px;border:1px solid #E8ECF0;font-size:11px;font-family:inherit">';
-  histMetrics.forEach(function(m){hhtml+='<option value="'+m+'"'+(m==="Daily Visit"?' selected':'')+'>'+m+'</option>';});
-  hhtml+='</select>';
+  var histMetrics=["Impression","Daily Visit","Blog","Podcast","Page"];
+  var metricLabels={"Impression":"Page Visits","Daily Visit":"Daily Visitors","Blog":"Blog","Podcast":"Podcast","Page":"Page"};
+  function mLabel(k){return metricLabels[k]||k;}
+  var trafficColors=["#0960BB","#FFBF3F","#2E7D32","#7C3AED","#E53935","#D97706","#0891B2","#8B5CF6"];
+  var defaultSelected=["Impression","Daily Visit"];
+  // Checkbox toggles
+  histMetrics.forEach(function(m,i){
+    var checked=defaultSelected.indexOf(m)>-1;
+    hhtml+='<label style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:500;cursor:pointer;border:1px solid '+(checked?trafficColors[i]:"#E8ECF0")+';background:'+(checked?trafficColors[i]+"14":"#fff")+';color:'+(checked?trafficColors[i]:"#8A9099")+'" id="hist-label-'+i+'">';
+    hhtml+='<input type="checkbox" class="hist-metric-cb" data-metric="'+m+'" data-idx="'+i+'"'+(checked?' checked':'')+' style="display:none">';
+    hhtml+='<span style="width:8px;height:8px;border-radius:50%;background:'+trafficColors[i]+';opacity:'+(checked?1:0.3)+'"></span>';
+    hhtml+=mLabel(m)+'</label>';
+  });
+  hhtml+='<span id="hist-select-hint" style="font-size:10px;color:#8A9099"></span>';
+  // Top content dropdown (populated after fetch)
+  hhtml+='<select id="hist-content-add" style="padding:4px 8px;border-radius:6px;border:1px solid #E8ECF0;font-size:11px;font-family:inherit;color:#8A9099"><option value="">+ Content line...</option></select>';
+  hhtml+='</div></div>';
+  hhtml+='<div id="hist-content-tags" style="display:flex;gap:4px;flex-wrap:wrap;margin:-4px 0 8px"></div>';
   hhtml+='<button class="import-btn" id="hist-fetch-btn" onclick="fetchHistorical()" style="background:#2E7D32;padding:5px 12px;font-size:11px">Reload</button>';
   hhtml+='</div></div>';
   hhtml+='<div id="hist-status" style="font-size:11px;color:#8A9099;margin-bottom:8px"></div>';
-  hhtml+='<div class="chart-wrap" style="height:260px"><canvas id="c-hist-traffic"></canvas></div>';
+  hhtml+='<div class="chart-wrap" style="height:280px"><canvas id="c-hist-traffic"></canvas></div>';
   hhtml+='</div></div>';
 
   hhtml+='<div class="charts"><div class="chart-card" style="flex:1 1 100%">';
-  hhtml+='<div class="chart-title">CommandBar Widget Interactions</div>';
+  hhtml+='<div class="chart-title">CommandBar Pip Interactions</div>';
   hhtml+='<div class="chart-wrap" style="height:220px"><canvas id="c-hist-widget"></canvas></div>';
   hhtml+='</div></div>';
 
   hhtml+='<div class="charts"><div class="chart-card" style="flex:1 1 100%">';
-  hhtml+='<div class="chart-title">Individual Widget Interactions</div>';
+  hhtml+='<div class="chart-title">CommandBar Rail Interactions</div>';
   hhtml+='<div class="chart-wrap" style="height:220px"><canvas id="c-hist-detail"></canvas></div>';
   hhtml+='</div></div>';
 
@@ -486,40 +505,96 @@ function render(){
 
   document.getElementById("tab-historical").innerHTML=hhtml;
 
-  // Re-render charts if data already loaded and selectors change
-  var m1El=document.getElementById("hist-m1");
-  var m2El=document.getElementById("hist-m2");
-  if(m1El)m1El.addEventListener("change",function(){if(histData)renderHistoricalCharts()});
-  if(m2El)m2El.addEventListener("change",function(){if(histData)renderHistoricalCharts()});
+  // Checkbox toggle handlers for traffic metrics
+  document.querySelectorAll(".hist-metric-cb").forEach(function(cb){
+    cb.addEventListener("change",function(){
+      var checked=document.querySelectorAll(".hist-metric-cb:checked");
+      if(checked.length>5){this.checked=false;return;}
+      // Update label styling
+      var idx=this.dataset.idx;
+      var label=document.getElementById("hist-label-"+idx);
+      if(label){
+        label.style.borderColor=this.checked?trafficColors[idx]:"#E8ECF0";
+        label.style.background=this.checked?trafficColors[idx]+"14":"#fff";
+        label.style.color=this.checked?trafficColors[idx]:"#8A9099";
+        label.querySelector("span").style.opacity=this.checked?1:0.3;
+      }
+      var hint=document.getElementById("hist-select-hint");
+      if(hint)hint.textContent=checked.length<2?"Select at least 2":"";
+      if(histData&&checked.length>=2)renderHistoricalCharts();
+    });
+  });
+  // Content dropdown add handler
+  var contentAdd=document.getElementById("hist-content-add");
+  if(contentAdd)contentAdd.addEventListener("change",function(){
+    if(!this.value)return;
+    addTrafficContentLine(this.value);
+    this.value="";
+    renderContentTags();
+  });
   // If data already loaded, render charts
   if(histData)setTimeout(renderHistoricalCharts,100);
+
+  // ── LEADERBOARD TAB ──
+  var lhtml='<div id="leaderboard-inner">';
+  if(!histData){
+    lhtml+='<div class="chart-card" style="text-align:center;padding:40px;color:#8A9099;font-size:12px">Loading daily data to build the leaderboard...</div>';
+  }
+  lhtml+='</div>';
+  document.getElementById("tab-leaderboard").innerHTML=lhtml;
+  if(histData)renderLeaderboard();
+
 }
 
 // ── HISTORICAL FETCH ──
 var histData=null;
+var histPrevData=null;
 var histTopContent=[];
 
 function rebuildHistSelectors(){
-  var selects=["hist-m1","hist-m2"];
-  var defaults=["Impression","Daily Visit"];
-  selects.forEach(function(id,idx){
-    var el=document.getElementById(id);
-    if(!el)return;
-    var current=el.value||defaults[idx];
-    var baseMetrics=["Impression","Daily Visit"];
-    var html="";
-    baseMetrics.forEach(function(m){
-      html+='<option value="'+m+'"'+(m===current?" selected":"")+'>'+m+'</option>';
+  var dd=document.getElementById("hist-content-add");
+  if(!dd)return;
+  var html='<option value="">+ Add content...</option>';
+  if(histTopContent.length>0){
+    histTopContent.forEach(function(t){
+      var short=t.length>42?t.slice(0,41)+"\u2026":t;
+      html+='<option value="'+t.replace(/"/g,"&quot;")+'">'+short+'</option>';
     });
-    if(histTopContent.length>0){
-      html+='<option disabled>── Top Content ──</option>';
-      histTopContent.forEach(function(t){
-        var short=t.length>45?t.slice(0,44)+"\u2026":t;
-        html+='<option value="'+t.replace(/"/g,"&quot;")+'"'+(t===current?" selected":"")+'>'+short+'</option>';
-      });
-    }
-    el.innerHTML=html;
+  }
+  dd.innerHTML=html;
+}
+
+var extraTrafficLines=[];
+
+function addTrafficContentLine(key){
+  if(extraTrafficLines.indexOf(key)>-1)return;
+  if(extraTrafficLines.length>=3){extraTrafficLines.shift();}
+  extraTrafficLines.push(key);
+  renderContentTags();
+  if(histData)renderHistoricalCharts();
+}
+
+function removeTrafficContentLine(key){
+  extraTrafficLines=extraTrafficLines.filter(function(k){return k!==key});
+  renderContentTags();
+  if(histData)renderHistoricalCharts();
+}
+
+function renderContentTags(){
+  var el=document.getElementById("hist-content-tags");
+  if(!el)return;
+  if(extraTrafficLines.length===0){el.innerHTML="";return;}
+  var tc=["#D97706","#0891B2","#8B5CF6"];
+  var html="";
+  extraTrafficLines.forEach(function(key,i){
+    var short=key.length>40?key.slice(0,39)+"\u2026":key;
+    var color=tc[i%tc.length];
+    html+='<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:12px;font-size:10px;font-weight:500;background:'+color+'14;color:'+color+';border:1px solid '+color+'30">';
+    html+=short;
+    html+='<span onclick="removeTrafficContentLine(\''+key.replace(/'/g,"\\'")+'\')" style="cursor:pointer;font-size:13px;line-height:1;opacity:.6">\u00d7</span>';
+    html+='</span>';
   });
+  el.innerHTML=html;
 }
 
 async function fetchHistorical(){
@@ -533,13 +608,15 @@ async function fetchHistorical(){
     return;
   }
 
-  var from=new Date(fromEl.value+"T00:00:00");
-  var to=new Date(toEl.value+"T00:00:00");
+  var from=new Date(fromEl.value+"T12:00:00");
+  var to=new Date(toEl.value+"T12:00:00");
   if(from>to){status.innerHTML='<span style="color:#E53935">Invalid date range.</span>';return;}
+
+  function fmtD(dt){var y=dt.getFullYear(),m=String(dt.getMonth()+1).padStart(2,"0"),d=String(dt.getDate()).padStart(2,"0");return y+"-"+m+"-"+d;}
 
   var days=[];
   var d=new Date(from);
-  while(d<=to){days.push(d.toISOString().split("T")[0]);d.setDate(d.getDate()+1);}
+  while(d<=to){days.push(fmtD(d));d.setDate(d.getDate()+1);}
 
   if(days.length>60){
     status.innerHTML='<span style="color:#E53935">Max 60 days for daily data. Narrow the date range.</span>';
@@ -550,28 +627,26 @@ async function fetchHistorical(){
   btn.innerHTML="Loading...";btn.style.opacity=".6";btn.style.pointerEvents="none";
   status.textContent="Fetching "+days.length+" days...";
 
-  try{
-    var dailyData=[];
-    for(var i=0;i<days.length;i++){
-      var dateStr=days[i].replace(/-/g,"");
-      status.textContent="Fetching day "+(i+1)+" of "+days.length+"...";
+  // Helper to fetch a range of days
+  async function fetchDays(dayList,statusPrefix){
+    var result=[];
+    for(var i=0;i<dayList.length;i++){
+      var dateStr=dayList[i].replace(/-/g,"");
+      status.textContent=statusPrefix+" day "+(i+1)+" of "+dayList.length+"...";
       var resp=await fetch(WORKER_URL+"?period="+dateStr+"&page_size=1000");
-      var result=await resp.json();
-      var dayEvents=result.data||[];
-      var dayObj={date:days[i],_titles:{}};
+      var data=await resp.json();
+      var dayEvents=data.data||[];
+      var dayObj={date:dayList[i],_titles:{}};
 
-      // Aggregate by action and track individual content titles + click types
       dayEvents.forEach(function(e){
         if(!dayObj[e.action])dayObj[e.action]=0;
         dayObj[e.action]+=e.events;
-        // Track individual content by title
         if(["Blog","Page","Podcast"].indexOf(e.action)>-1 && e.label.indexOf(": ")>-1){
           var title=e.label.split(": ").slice(1).join(": ");
           var key=e.action+": "+title;
           if(!dayObj._titles[key])dayObj._titles[key]=0;
           dayObj._titles[key]+=e.events;
         }
-        // Track individual click types
         if(e.action==="Click"){
           var clk="click_other";
           if(e.label==="Mystuff")clk="click_mystuff";
@@ -585,23 +660,32 @@ async function fetchHistorical(){
           if(!dayObj[clk])dayObj[clk]=0;
           dayObj[clk]+=e.events;
         }
-        // Track individual share/save items
-        if(e.action==="Share"){
-          var sk="share_"+e.label;
-          if(!dayObj[sk])dayObj[sk]=0;
-          dayObj[sk]+=e.events;
-        }
-        if(e.action==="Save"){
-          var svk="save_"+e.label;
-          if(!dayObj[svk])dayObj[svk]=0;
-          dayObj[svk]+=e.events;
-        }
+        if(e.action==="Share"){var sk="share_"+e.label;if(!dayObj[sk])dayObj[sk]=0;dayObj[sk]+=e.events;}
+        if(e.action==="Save"){var svk="save_"+e.label;if(!dayObj[svk])dayObj[svk]=0;dayObj[svk]+=e.events;}
       });
 
-      dailyData.push(dayObj);
+      result.push(dayObj);
     }
+    return result;
+  }
 
+  try{
+    // Fetch current period
+    var dailyData=await fetchDays(days,"Current period:");
     histData=dailyData;
+
+    // Fetch prior period (same length, immediately before)
+    var periodLen=days.length;
+    var prevEnd=new Date(from);
+    prevEnd.setDate(prevEnd.getDate()-1);
+    var prevStart=new Date(prevEnd);
+    prevStart.setDate(prevStart.getDate()-periodLen+1);
+    var prevDays=[];
+    var pd=new Date(prevStart);
+    while(pd<=prevEnd){prevDays.push(fmtD(pd));pd.setDate(pd.getDate()+1);}
+
+    status.textContent="Fetching prior period for comparison...";
+    histPrevData=await fetchDays(prevDays,"Prior period:");
 
     // Build top content list from aggregated data
     var titleTotals={};
@@ -613,9 +697,10 @@ async function fetchHistorical(){
     });
     histTopContent=Object.keys(titleTotals).sort(function(a,b){return titleTotals[b]-titleTotals[a]}).slice(0,10);
 
-    status.innerHTML='<span style="color:#2E7D32">'+days.length+' days loaded successfully.</span>';
+    status.innerHTML='<span style="color:#2E7D32">'+days.length+' days loaded (+ '+prevDays.length+' day prior period).</span>';
     rebuildHistSelectors();
     renderHistoricalCharts();
+    renderLeaderboard();
 
   }catch(err){
     status.innerHTML='<span style="color:#E53935">Fetch failed: '+err.message+'</span>';
@@ -627,8 +712,17 @@ async function fetchHistorical(){
 function renderHistoricalCharts(){
   if(!histData||!histData.length)return;
 
-  var m1=(document.getElementById("hist-m1")||{}).value||"Impression";
-  var m2=(document.getElementById("hist-m2")||{}).value||"Daily Visit";
+  // Get selected metrics from checkboxes
+  var selectedMetrics=[];
+  document.querySelectorAll(".hist-metric-cb:checked").forEach(function(cb){
+    selectedMetrics.push(cb.dataset.metric);
+  });
+  // Add extra content lines
+  extraTrafficLines.forEach(function(k){
+    if(selectedMetrics.indexOf(k)===-1)selectedMetrics.push(k);
+  });
+  if(selectedMetrics.length<1)selectedMetrics=["Impression"];
+
   var labels=histData.map(function(d){
     var p=d.date.split("-");
     return parseInt(p[1])+"/"+parseInt(p[2]);
@@ -637,31 +731,69 @@ function renderHistoricalCharts(){
   // Destroy old charts
   if(charts.histTraffic)charts.histTraffic.destroy();
   if(charts.histWidget)charts.histWidget.destroy();
+  if(charts.histDetail)charts.histDetail.destroy();
 
   // Helper: get value for a metric key from a day object
   function getVal(d,key){
-    // Check if it's a content title (stored in _titles)
     if(d._titles && d._titles[key]!==undefined)return d._titles[key];
-    // Otherwise it's an action-level metric
     return d[key]||0;
   }
 
-  // Traffic chart
-  var m1Short=m1.length>35?m1.slice(0,34)+"\u2026":m1;
-  var m2Short=m2.length>35?m2.slice(0,34)+"\u2026":m2;
+  var dispLabel={"Impression":"Page Visits","Daily Visit":"Daily Visitors"};
+  function dLabel(k){var l=dispLabel[k]||k;return l.length>35?l.slice(0,34)+"\u2026":l;}
+
+  var trafficColors=["#0960BB","#FFBF3F","#2E7D32","#7C3AED","#E53935","#D97706","#0891B2","#8B5CF6"];
+
+  // Build datasets for selected metrics
+  var datasets=selectedMetrics.map(function(key,i){
+    return{
+      label:dLabel(key),
+      data:histData.map(function(d){return getVal(d,key)}),
+      borderColor:trafficColors[i%trafficColors.length],
+      backgroundColor:trafficColors[i%trafficColors.length]+"15",
+      fill:i<2,
+      tension:0.3,
+      pointRadius:3,
+      pointHoverRadius:5,
+      borderWidth:2
+    };
+  });
+
   charts.histTraffic=new Chart(document.getElementById("c-hist-traffic"),{
     type:"line",
-    data:{
-      labels:labels,
-      datasets:[
-        {label:m1Short,data:histData.map(function(d){return getVal(d,m1)}),borderColor:CL.blue,backgroundColor:CL.blue+"20",fill:true,tension:0.3,pointRadius:3,pointHoverRadius:5,borderWidth:2},
-        {label:m2Short,data:histData.map(function(d){return getVal(d,m2)}),borderColor:CL.gold,backgroundColor:CL.gold+"20",fill:true,tension:0.3,pointRadius:3,pointHoverRadius:5,borderWidth:2}
-      ]
-    },
+    data:{labels:labels,datasets:datasets},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{font:{size:11},padding:10}}},scales:{y:{beginAtZero:true,grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099"}},x:{grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099",maxRotation:45}}},interaction:{mode:"index",intersect:false}}
   });
 
-  // Widget metrics chart
+  // Insights based on primary selected metric
+  var pm=selectedMetrics[0];
+  var pmLabel=dLabel(pm);
+  var totalPM=histData.reduce(function(s,d){return s+getVal(d,pm)},0);
+  var peakDay=histData.reduce(function(best,d){return getVal(d,pm)>getVal(best,pm)?d:best},histData[0]);
+  var avgPM=(totalPM/histData.length).toFixed(1);
+
+  var ihtml='<div class="insights"><h3>Trend Analysis</h3><div>';
+  ihtml+='<div><strong>'+pmLabel+':</strong> '+totalPM+' total over '+histData.length+' days (avg '+avgPM+'/day). Peak: '+peakDay.date+' with '+getVal(peakDay,pm)+'.</div>';
+
+  // Show totals for other selected metrics
+  selectedMetrics.slice(1).forEach(function(key){
+    var t=histData.reduce(function(s,d){return s+getVal(d,key)},0);
+    var a=(t/histData.length).toFixed(1);
+    ihtml+='<div><strong>'+dLabel(key)+':</strong> '+t+' total (avg '+a+'/day).</div>';
+  });
+
+  if(histData.length>=3){
+    var firstHalf=histData.slice(0,Math.floor(histData.length/2));
+    var secondHalf=histData.slice(Math.floor(histData.length/2));
+    var avg1=firstHalf.reduce(function(s,d){return s+getVal(d,pm)},0)/firstHalf.length;
+    var avg2=secondHalf.reduce(function(s,d){return s+getVal(d,pm)},0)/secondHalf.length;
+    var trendPct=avg1>0?((avg2-avg1)/avg1*100).toFixed(0):0;
+    var trendDir=trendPct>5?"trending up \u2191":trendPct<-5?"trending down \u2193":"holding steady \u2192";
+    ihtml+='<div><strong>Direction:</strong> '+pmLabel+' is '+trendDir+' ('+trendPct+'% change, first half vs second half).</div>';
+  }
+
+  ihtml+='</div></div>';
+  // CommandBar Pip Interactions chart
   var widgetMetrics=[
     {key:"Open",label:"Rail Opens",color:CL.navy},
     {key:"Share",label:"Shares",color:CL.green},
@@ -681,9 +813,7 @@ function renderHistoricalCharts(){
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{font:{size:11},padding:10}}},scales:{y:{beginAtZero:true,grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099"}},x:{grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099",maxRotation:45}}},interaction:{mode:"index",intersect:false}}
   });
 
-  // Insights
-  // Individual widget interactions chart
-  if(charts.histDetail)charts.histDetail.destroy();
+  // CommandBar Rail Interactions chart
   var detailMetrics=[
     {key:"click_mystuff",label:"My Stuff",color:CL.navy},
     {key:"click_signup",label:"Signup",color:CL.blue},
@@ -694,7 +824,6 @@ function renderHistoricalCharts(){
     {key:"click_recent",label:"Recent Nav",color:"#6B7280"},
     {key:"click_saved",label:"Saved Nav",color:"#8B5CF6"}
   ];
-  // Only include metrics that have data
   var activeDetail=detailMetrics.filter(function(m){
     return histData.some(function(d){return(d[m.key]||0)>0});
   });
@@ -711,41 +840,150 @@ function renderHistoricalCharts(){
     });
   }
 
-  var totalM1=histData.reduce(function(s,d){return s+getVal(d,m1)},0);
-  var totalM2=histData.reduce(function(s,d){return s+getVal(d,m2)},0);
-  var peakDay=histData.reduce(function(best,d){return getVal(d,m1)>getVal(best,m1)?d:best},histData[0]);
-  var avgM1=(totalM1/histData.length).toFixed(1);
-  var avgM2=(totalM2/histData.length).toFixed(1);
+  // Insights based on primary selected metric
+  document.getElementById("hist-insights").innerHTML=ihtml;
+}
 
-  var ihtml='<div class="insights"><h3>Trend Analysis</h3><div>';
-  ihtml+='<div><strong>'+m1Short+':</strong> '+totalM1+' total over '+histData.length+' days (avg '+avgM1+'/day). Peak: '+peakDay.date+' with '+getVal(peakDay,m1)+'.</div>';
-  ihtml+='<div><strong>'+m2Short+':</strong> '+totalM2+' total (avg '+avgM2+'/day).</div>';
+function renderLeaderboard(){
+  var el=document.getElementById("leaderboard-inner");
+  if(!el||!histData||!histData.length)return;
 
-  // Simple trend direction
-  if(histData.length>=3){
-    var firstHalf=histData.slice(0,Math.floor(histData.length/2));
-    var secondHalf=histData.slice(Math.floor(histData.length/2));
-    var avg1=firstHalf.reduce(function(s,d){return s+getVal(d,m1)},0)/firstHalf.length;
-    var avg2=secondHalf.reduce(function(s,d){return s+getVal(d,m1)},0)/secondHalf.length;
-    var trendPct=avg1>0?((avg2-avg1)/avg1*100).toFixed(0):0;
-    var trendDir=trendPct>5?"trending up \u2191":trendPct<-5?"trending down \u2193":"holding steady \u2192";
-    ihtml+='<div><strong>Direction:</strong> '+m1Short+' is '+trendDir+' ('+trendPct+'% change, first half vs second half).</div>';
+  // Aggregate current period
+  var titleTotals={};
+  var titleDaily={};
+  histData.forEach(function(day){
+    if(!day._titles)return;
+    Object.keys(day._titles).forEach(function(key){
+      if(!titleTotals[key])titleTotals[key]=0;
+      titleTotals[key]+=day._titles[key];
+      if(!titleDaily[key])titleDaily[key]=[];
+    });
+  });
+  Object.keys(titleDaily).forEach(function(key){
+    histData.forEach(function(day){
+      titleDaily[key].push(day._titles&&day._titles[key]?day._titles[key]:0);
+    });
+  });
+
+  // Aggregate prior period
+  var prevTotals={};
+  var prevDaily={};
+  if(histPrevData&&histPrevData.length){
+    histPrevData.forEach(function(day){
+      if(!day._titles)return;
+      Object.keys(day._titles).forEach(function(key){
+        if(!prevTotals[key])prevTotals[key]=0;
+        prevTotals[key]+=day._titles[key];
+        if(!prevDaily[key])prevDaily[key]=[];
+      });
+    });
+    Object.keys(prevDaily).forEach(function(key){
+      histPrevData.forEach(function(day){
+        prevDaily[key].push(day._titles&&day._titles[key]?day._titles[key]:0);
+      });
+    });
   }
 
-  ihtml+='</div></div>';
-  document.getElementById("hist-insights").innerHTML=ihtml;
+  var sorted=Object.keys(titleTotals).sort(function(a,b){return titleTotals[b]-titleTotals[a]}).slice(0,15);
+  if(sorted.length===0){el.innerHTML='';return;}
+
+  var maxTotal=titleTotals[sorted[0]]||1;
+  var hasPrev=histPrevData&&histPrevData.length>0;
+
+  var html='<div class="chart-card" style="flex:1 1 100%;margin-bottom:16px">';
+  html+='<div class="chart-title">Content Leaderboard</div>';
+  html+='<div style="font-size:11px;color:#8A9099;margin:-6px 0 8px">Top content by total events'+(hasPrev?' \u2014 colored bars = current, <span style="color:#D0D5DD">\u2588</span> grey = prior period':'')+'</div>';
+
+  sorted.forEach(function(key,idx){
+    var total=titleTotals[key];
+    var daily=titleDaily[key]||[];
+    var prevTotal=prevTotals[key]||0;
+    var prev=prevDaily[key]||[];
+    var barPct=Math.round((total/maxTotal)*100);
+
+    var type=key.split(": ")[0];
+    var title=key.split(": ").slice(1).join(": ");
+    var typeColor=type==="Blog"?"#0960BB":type==="Podcast"?"#B48A00":"#8A9099";
+    var typeBg=type==="Blog"?"#0960BB14":type==="Podcast"?"#FFBF3F14":"#8A909914";
+
+    // Change vs prior period
+    var changePct=prevTotal>0?Math.round((total-prevTotal)/prevTotal*100):total>0?100:0;
+    var changeArrow=changePct>0?"\u2191"+changePct+"%":changePct<0?"\u2193"+Math.abs(changePct)+"%":"\u2192";
+    var changeColor=changePct>0?"#2E7D32":changePct<0?"#E53935":"#8A9099";
+
+    // Dual mini bar chart SVG
+    var sparkW=130;
+    var sparkH=30;
+    var allVals=daily.concat(prev);
+    var maxDay=Math.max.apply(null,allVals.length>0?allVals:[0])||1;
+    var numDays=Math.max(daily.length,prev.length,1);
+    var barGap=1;
+    var groupW=(sparkW-barGap*(numDays-1))/numDays;
+    var barW=prev.length>0?groupW/2-0.5:groupW;
+
+    html+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;'+(idx<sorted.length-1?'border-bottom:1px solid #F0F2F5;':'')+'">';
+
+    // Rank
+    html+='<div style="width:22px;font-size:11px;font-weight:700;color:'+(idx<3?"#002D72":"#8A9099")+';text-align:center;flex-shrink:0">'+(idx+1)+'</div>';
+
+    // Title + type
+    html+='<div style="flex:1;min-width:0;overflow:hidden">';
+    html+='<div style="font-size:12px;font-weight:500;color:#1A1A2E;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+title+'</div>';
+    html+='<span style="font-size:9px;font-weight:600;padding:1px 6px;border-radius:6px;background:'+typeBg+';color:'+typeColor+'">'+type+'</span>';
+    html+='</div>';
+
+    // Mini bar chart
+    var sparkColor=changePct>0?"#2E7D32":changePct<0?"#C62828":"#455A64";
+    html+='<div style="flex-shrink:0;width:'+sparkW+'px">';
+    html+='<svg width="'+sparkW+'" height="'+sparkH+'" viewBox="0 0 '+sparkW+' '+sparkH+'">';
+    for(var di=0;di<numDays;di++){
+      var x=di*(groupW+barGap);
+      // Prior period bar (grey)
+      if(prev.length>0&&di<prev.length){
+        var ph=prev[di]>0?Math.max(2,(prev[di]/maxDay)*(sparkH-2)):0;
+        if(ph>0)html+='<rect x="'+x.toFixed(1)+'" y="'+(sparkH-ph).toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+ph.toFixed(1)+'" rx="1" fill="#D0D5DD"/>';
+      }
+      // Current period bar (colored)
+      var cx=prev.length>0?x+barW+1:x;
+      if(di<daily.length){
+        var ch=daily[di]>0?Math.max(2,(daily[di]/maxDay)*(sparkH-2)):0;
+        if(ch>0)html+='<rect x="'+cx.toFixed(1)+'" y="'+(sparkH-ch).toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+ch.toFixed(1)+'" rx="1" fill="'+sparkColor+'"/>';
+      }
+    }
+    html+='</svg></div>';
+
+    // Total + change
+    html+='<div style="flex-shrink:0;text-align:right;width:65px">';
+    html+='<div style="font-size:14px;font-weight:700;color:#002D72">'+total+'</div>';
+    html+='<div style="font-size:10px;color:'+changeColor+';font-weight:600">'+changeArrow+'</div>';
+    if(hasPrev&&prevTotal>0)html+='<div style="font-size:9px;color:#8A9099">was '+prevTotal+'</div>';
+    html+='</div>';
+
+    // Bar
+    html+='<div style="flex-shrink:0;width:80px;height:6px;background:#F5F7FA;border-radius:3px;overflow:hidden">';
+    html+='<div style="height:100%;width:'+barPct+'%;background:#0960BB;border-radius:3px"></div>';
+    html+='</div>';
+
+    html+='</div>';
+  });
+
+  html+='</div>';
+  el.innerHTML=html;
 }
 document.querySelectorAll("#tabs-bar .tab").forEach(btn=>{
   btn.addEventListener("click",()=>{
     document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
     btn.classList.add("active");
     currentTab=btn.dataset.tab;
-    ["overview","content","insights","engagement","historical"].forEach(t=>{
+    ["overview","content","insights","engagement","historical","leaderboard"].forEach(t=>{
       document.getElementById("tab-"+t).classList.toggle("hidden",t!==currentTab);
     });
     // Auto-load historical data when tab is opened for the first time
-    if(currentTab==="historical" && !histData){
+    if((currentTab==="historical"||currentTab==="leaderboard") && !histData){
       setTimeout(fetchHistorical,100);
+    }
+    if(currentTab==="leaderboard" && histData){
+      renderLeaderboard();
     }
   });
 });
@@ -815,7 +1053,7 @@ async function fetchAPI(){
 (function(){
   var today=new Date();
   var week=new Date(today);week.setDate(week.getDate()-6);
-  var fmt=function(d){return d.toISOString().split("T")[0]};
+  var fmt=function(d){var y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),dd=String(d.getDate()).padStart(2,"0");return y+"-"+m+"-"+dd;};
   document.getElementById("date-from").value=fmt(week);
   document.getElementById("date-to").value=fmt(today);
 })();
@@ -867,7 +1105,7 @@ async function exportPDF(){
       pdf.setFillColor(0,45,114);
       pdf.rect(0,0,pw,18,"F");
       pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);
-      pdf.text("CommandBar Analytics v1.4.1",margin,12);
+      pdf.text("CommandBar Analytics v1.8.1",margin,12);
       pdf.setFont("helvetica","normal");pdf.setFontSize(9);
       pdf.text((PERIOD?PERIOD+" \u00b7 ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});
       pdf.setFillColor(9,96,187);
@@ -878,7 +1116,7 @@ async function exportPDF(){
     }
     function drawFooter(n){
       pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);
-      pdf.text("CommandBar Analytics Dashboard v1.4.1 \u00b7 SiteImprove Events",margin,ph-5);
+      pdf.text("CommandBar Analytics Dashboard v1.8.1 \u00b7 SiteImprove Events",margin,ph-5);
       pdf.text("Page "+n,pw-margin,ph-5,{align:"right"});
     }
 
@@ -1007,8 +1245,8 @@ async function exportPDF(){
     }
 
     // ── Capture tabs ──
-    const tabs=["overview","content","insights","engagement","historical"];
-    const tabNames=["Overview","Content","Insights","Engagement"];
+    const tabs=["overview","content","insights","engagement","historical","leaderboard"];
+    const tabNames=["Overview","Content","Performance","Activity","Compare","Trending"];
     const savedTab=currentTab;
 
     for(let i=0;i<tabs.length;i++){
@@ -1041,7 +1279,7 @@ async function exportPDF(){
   }catch(err){
     console.error("PDF export error:",err);
     document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>PDF export failed: '+err.message+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
-    ["overview","content","insights","engagement","historical"].forEach(t=>{
+    ["overview","content","insights","engagement","historical","leaderboard"].forEach(t=>{
       const el=document.getElementById("tab-"+t);el.style.display="";
       el.classList.toggle("hidden",t!==currentTab);
     });
@@ -1051,6 +1289,10 @@ async function exportPDF(){
 }
 
 // ── INIT ──
+if(new URLSearchParams(window.location.search).has("csv")){
+  var csvBtn=document.getElementById("csv-btn");
+  if(csvBtn)csvBtn.style.display="";
+}
 render();
 </script>
 </body>
