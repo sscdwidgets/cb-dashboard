@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CommandBar Analytics Dashboard v2.4.12</title>
+<title>CommandBar Analytics Dashboard v2.4.13</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -116,7 +116,7 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div class="header">
     <div class="header-left">
       <div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
-      <div style="position:relative;display:inline-block"><div class="title">CommandBar Analytics<span style="margin-left:10px;font-size:11px;font-weight:300;letter-spacing:.5px;color:rgba(255,255,255,0.35);vertical-align:middle">v2.4.12</span></div><div class="subtitle" id="period-label">SouthState Correspondent</div></div>
+      <div style="position:relative;display:inline-block"><div class="title">CommandBar Analytics<span style="margin-left:10px;font-size:11px;font-weight:300;letter-spacing:.5px;color:rgba(255,255,255,0.35);vertical-align:middle">v2.4.13</span></div><div class="subtitle" id="period-label">SouthState Correspondent</div></div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <div style="display:flex;gap:4px;align-items:center">
@@ -164,7 +164,7 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div id="tab-companies" class="hidden"></div>
   <div id="tab-map" class="hidden"></div>
 
-  <div class="footer" id="footer">CommandBar Analytics Dashboard v2.4.12 · Powered by SiteImprove Events + Leadfeeder · SouthState Correspondent</div>
+  <div class="footer" id="footer">CommandBar Analytics Dashboard v2.4.13 · Powered by SiteImprove Events + Leadfeeder · SouthState Correspondent</div>
 </div>
 
 <script>
@@ -983,15 +983,30 @@ function renderCompanyPages(el,visits){
   var html='<div style="margin-bottom:4px;font-size:10px;font-weight:600;color:#002D72;text-transform:uppercase;letter-spacing:.5px">'+visits.length+' Visit'+(visits.length>1?"s":"")+'</div>';
   visits.forEach(function(v,vi){
     var route=v.visit_route||[];
+    // Check if any page in this visit has utm_sfc
+    var visitHasContact=route.some(function(p){
+      if(!p.page_path) return false;
+      var qIdx=p.page_path.indexOf("?");
+      if(qIdx===-1) return false;
+      return p.page_path.slice(qIdx+1).split("&").some(function(pair){
+        var kv=pair.split("=");
+        return kv[0]==="utm_sfc"&&kv[1];
+      });
+    });
     var timeStr=v.date+(v.hour!=null?" at "+String(v.hour).padStart(2,"0")+":00":"");
     var lengthStr=v.visit_length>0?Math.floor(v.visit_length/60)+"m "+(v.visit_length%60)+"s":"< 1s";
     var srcStr=(v.source||"direct")+(v.medium?" / "+v.medium:"");
-    html+='<div style="padding:8px 0;'+(vi<visits.length-1?"border-bottom:1px solid #E8ECF0;":"")+'">';
-    html+='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px">';
+    // Highlight visit block if contact identified
+    var blockStyle="padding:8px 0 8px "+(visitHasContact?"10px":"0")+";";
+    blockStyle+=vi<visits.length-1?"border-bottom:1px solid #E8ECF0;":"";
+    blockStyle+=visitHasContact?"border-left:3px solid #FFBF3F;margin-left:-2px;background:linear-gradient(to right,#FFBF3F0A,transparent 60%);":"";
+    html+='<div style="'+blockStyle+'">';
+    html+='<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:4px">';
     html+='<span style="font-size:11px;font-weight:600;color:#1A1A2E">'+timeStr+'</span>';
     html+='<span style="font-size:10px;color:#8A9099">'+lengthStr+' · '+route.length+' page'+(route.length!==1?"s":"")+'</span>';
     html+='<span style="font-size:10px;color:#8A9099">via '+srcStr+'</span>';
     if(v.device_type)html+='<span style="font-size:10px;color:#8A9099">· '+v.device_type+'</span>';
+    if(visitHasContact)html+='<span style="font-size:9px;font-weight:700;color:#B8860B;background:#FFBF3F22;border:1px solid #FFBF3F55;border-radius:4px;padding:1px 6px;letter-spacing:.4px;text-transform:uppercase">Contact Identified</span>';
     html+='</div>';
     if(route.length>0){
       html+='<div style="margin-left:8px;border-left:2px solid #E8ECF0;padding-left:10px">';
@@ -1531,8 +1546,8 @@ async function exportPDF(){
   btn.innerHTML="Generating...";btn.style.opacity=".6";btn.style.pointerEvents="none";
   try{
     const {jsPDF}=window.jspdf;const pdf=new jsPDF("l","mm","a4");const pw=pdf.internal.pageSize.getWidth();const ph=pdf.internal.pageSize.getHeight();const margin=12;const contentW=pw-margin*2;const headerH=27;const footerH=8;const availH=ph-headerH-footerH;let pageCount=0;
-    function drawHeader(title,contd){pdf.setFillColor(0,45,114);pdf.rect(0,0,pw,18,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);pdf.text("CommandBar Analytics v2.4.12",margin,12);pdf.setFont("helvetica","normal");pdf.setFontSize(9);pdf.text((PERIOD?PERIOD+" · ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});pdf.setFillColor(9,96,187);pdf.rect(0,18,pw,6,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(8);pdf.setTextColor(255,255,255);pdf.text(title.toUpperCase()+(contd?" (CONTINUED)":""),margin,22.5);pdf.setTextColor(0,0,0);}
-    function drawFooter(n){pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);pdf.text("CommandBar Analytics Dashboard v2.4.12 · SiteImprove Events",margin,ph-5);pdf.text("Page "+n,pw-margin,ph-5,{align:"right"});}
+    function drawHeader(title,contd){pdf.setFillColor(0,45,114);pdf.rect(0,0,pw,18,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);pdf.text("CommandBar Analytics v2.4.13",margin,12);pdf.setFont("helvetica","normal");pdf.setFontSize(9);pdf.text((PERIOD?PERIOD+" · ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});pdf.setFillColor(9,96,187);pdf.rect(0,18,pw,6,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(8);pdf.setTextColor(255,255,255);pdf.text(title.toUpperCase()+(contd?" (CONTINUED)":""),margin,22.5);pdf.setTextColor(0,0,0);}
+    function drawFooter(n){pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);pdf.text("CommandBar Analytics Dashboard v2.4.13 · SiteImprove Events",margin,ph-5);pdf.text("Page "+n,pw-margin,ph-5,{align:"right"});}
     function addPage(title,contd){if(pageCount>0)pdf.addPage();pageCount++;drawHeader(title,contd||false);drawFooter(pageCount);}
     async function captureAndAdd(el,tabName){const canvas=await html2canvas(el,{scale:2,backgroundColor:"#F5F7FA",useCORS:true,logging:false,windowWidth:980});const imgData=canvas.toDataURL("image/jpeg",0.92);const imgW=contentW;const imgH=(canvas.height/canvas.width)*contentW;const finalH=Math.min(imgH,availH);const finalW=imgH>availH?(availH/imgH)*imgW:imgW;const xOff=margin+(contentW-finalW)/2;addPage(tabName);pdf.addImage(imgData,"JPEG",xOff,headerH,finalW,finalH);}
     function drawContentTable(){
