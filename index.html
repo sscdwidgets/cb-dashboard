@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CommandBar Analytics Dashboard v2.4.5</title>
+<title>CommandBar Analytics Dashboard v2.4.6</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -116,7 +116,7 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div class="header">
     <div class="header-left">
       <div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
-      <div style="position:relative;display:inline-block"><div class="title">CommandBar Analytics<span style="margin-left:10px;font-size:11px;font-weight:300;letter-spacing:.5px;color:rgba(255,255,255,0.35);vertical-align:middle">v2.4.5</span></div><div class="subtitle" id="period-label">SouthState Correspondent</div></div>
+      <div style="position:relative;display:inline-block"><div class="title">CommandBar Analytics<span style="margin-left:10px;font-size:11px;font-weight:300;letter-spacing:.5px;color:rgba(255,255,255,0.35);vertical-align:middle">v2.4.6</span></div><div class="subtitle" id="period-label">SouthState Correspondent</div></div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <div style="display:flex;gap:4px;align-items:center">
@@ -164,7 +164,7 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div id="tab-companies" class="hidden"></div>
   <div id="tab-map" class="hidden"></div>
 
-  <div class="footer" id="footer">CommandBar Analytics Dashboard v2.4.5 · Powered by SiteImprove Events + Leadfeeder · SouthState Correspondent</div>
+  <div class="footer" id="footer">CommandBar Analytics Dashboard v2.4.6 · Powered by SiteImprove Events + Leadfeeder · SouthState Correspondent</div>
 </div>
 
 <script>
@@ -395,7 +395,7 @@ function renderOverview(d){
   const pods=d.articles.filter(function(a){return a.type==="Podcast";});
 
   // ── Leadfeeder: new vs returning + top companies ──
-  var lfNew=0,lfReturning=0,topCompanies=[];
+  var lfNew=0,lfReturning=0;
   var fromVal=document.getElementById("date-from")&&document.getElementById("date-from").value;
   var lfLoading=!companiesData;
   if(companiesData&&companiesData.length){
@@ -406,7 +406,7 @@ function renderOverview(d){
       if(fromVal&&c.first_visit_date&&c.first_visit_date>=fromVal) lfNew++;
       else lfReturning++;
     });
-    topCompanies=visible.slice().sort(function(a,b){return(b.quality_score||0)-(a.quality_score||0);}).slice(0,5);
+
   }
 
   // ── Stat cards: Daily Visitors + New vs Returning ──
@@ -434,20 +434,28 @@ function renderOverview(d){
   // Content by Type donut
   html+='<div class="chart-card" style="flex:1 1 180px"><div class="chart-title">Content by Type</div><div class="chart-wrap" style="height:170px"><canvas id="c-type-ov"></canvas></div></div>';
 
-  // Top Visiting Companies
-  html+='<div class="chart-card" style="flex:1 1 240px"><div class="chart-title">Top Visiting Companies</div>';
+  // Top States by visitor count
+  var stateCounts={};
+  if(!lfLoading&&companiesData){
+    companiesData.filter(function(c){
+      return !INTERNAL_NAMES.some(function(n){return(c.name||"").toLowerCase().includes(n.toLowerCase());});
+    }).forEach(function(c){
+      var sc=c.state||c.location_state||"";
+      if(sc){stateCounts[sc]=(stateCounts[sc]||0)+1;}
+    });
+  }
+  var topStates=Object.entries(stateCounts).sort(function(a,b){return b[1]-a[1];}).slice(0,5);
+  html+='<div class="chart-card" style="flex:1 1 240px"><div class="chart-title">Top States Visiting</div>';
   if(lfLoading){
     html+='<div style="font-size:12px;color:#8A9099;padding:12px 0">Loading...</div>';
-  } else if(topCompanies.length){
-    topCompanies.forEach(function(c){
-      var q=c.quality_score||0;
-      var qColor=q>=8?CL.blue:q>=5?CL.gold:CL.red;
-      var ind=c.industry?'<span style="font-size:10px;color:#8A9099;margin-left:5px">'+trunc(c.industry,18)+'</span>':'';
-      html+='<div class="top5-item"><div class="top5-row"><span class="top5-title">'+trunc(c.name||"Unknown",26)+ind+'</span>';
-      html+='<div class="top5-right"><span style="font-size:11px;font-weight:700;color:'+qColor+'">Q'+q+'</span></div></div></div>';
+  } else if(topStates.length){
+    var maxSt=topStates[0][1];
+    topStates.forEach(function(pair){
+      var pct=maxSt>0?(pair[1]/maxSt*100):0;
+      html+='<div class="top5-item"><div class="top5-row"><span class="top5-title">'+pair[0]+'</span><div class="top5-right"><span class="top5-count">'+pair[1]+'</span></div></div><div class="top5-bar"><div class="top5-fill" style="width:'+pct+'%;background:'+CL.navy+'"></div></div></div>';
     });
   } else {
-    html+='<div style="font-size:12px;color:#8A9099;padding:12px 0">No company data this period</div>';
+    html+='<div style="font-size:12px;color:#8A9099;padding:12px 0">No location data this period</div>';
   }
   html+='</div>';
 
@@ -804,13 +812,13 @@ async function fetchCompanies(){
       pg++;
     }
     companiesData=allLeads;
-    // Refresh overview Leadfeeder panels if overview is visible
-    if(currentTab==="overview"&&hasData){var dov=process(RAW_DATA);renderOverview(dov);}
+    // Refresh overview Leadfeeder panels whenever companies finish loading
+    if(hasData){var dov=process(RAW_DATA);renderOverview(dov);}
     var feedLabel=currentLfFeed?" · "+lfFeedName(currentLfFeed):"";
     if(status)status.innerHTML='<span style="color:#2E7D32">'+allLeads.length+' companies loaded'+feedLabel+'.</span>';
     renderCompaniesTable();
-    // Rebuild map state data if map was also loaded
-    if(mapStateData!==null){buildMapStateData();}
+    // Always rebuild map state data after companies load
+    buildMapStateData();
   }catch(err){
     if(status)status.innerHTML='<span style="color:#E53935">Failed: '+err.message+'</span>';
   }
@@ -1482,8 +1490,8 @@ async function exportPDF(){
   btn.innerHTML="Generating...";btn.style.opacity=".6";btn.style.pointerEvents="none";
   try{
     const {jsPDF}=window.jspdf;const pdf=new jsPDF("l","mm","a4");const pw=pdf.internal.pageSize.getWidth();const ph=pdf.internal.pageSize.getHeight();const margin=12;const contentW=pw-margin*2;const headerH=27;const footerH=8;const availH=ph-headerH-footerH;let pageCount=0;
-    function drawHeader(title,contd){pdf.setFillColor(0,45,114);pdf.rect(0,0,pw,18,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);pdf.text("CommandBar Analytics v2.4.5",margin,12);pdf.setFont("helvetica","normal");pdf.setFontSize(9);pdf.text((PERIOD?PERIOD+" · ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});pdf.setFillColor(9,96,187);pdf.rect(0,18,pw,6,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(8);pdf.setTextColor(255,255,255);pdf.text(title.toUpperCase()+(contd?" (CONTINUED)":""),margin,22.5);pdf.setTextColor(0,0,0);}
-    function drawFooter(n){pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);pdf.text("CommandBar Analytics Dashboard v2.4.5 · SiteImprove Events",margin,ph-5);pdf.text("Page "+n,pw-margin,ph-5,{align:"right"});}
+    function drawHeader(title,contd){pdf.setFillColor(0,45,114);pdf.rect(0,0,pw,18,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);pdf.text("CommandBar Analytics v2.4.6",margin,12);pdf.setFont("helvetica","normal");pdf.setFontSize(9);pdf.text((PERIOD?PERIOD+" · ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});pdf.setFillColor(9,96,187);pdf.rect(0,18,pw,6,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(8);pdf.setTextColor(255,255,255);pdf.text(title.toUpperCase()+(contd?" (CONTINUED)":""),margin,22.5);pdf.setTextColor(0,0,0);}
+    function drawFooter(n){pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);pdf.text("CommandBar Analytics Dashboard v2.4.6 · SiteImprove Events",margin,ph-5);pdf.text("Page "+n,pw-margin,ph-5,{align:"right"});}
     function addPage(title,contd){if(pageCount>0)pdf.addPage();pageCount++;drawHeader(title,contd||false);drawFooter(pageCount);}
     async function captureAndAdd(el,tabName){const canvas=await html2canvas(el,{scale:2,backgroundColor:"#F5F7FA",useCORS:true,logging:false,windowWidth:980});const imgData=canvas.toDataURL("image/jpeg",0.92);const imgW=contentW;const imgH=(canvas.height/canvas.width)*contentW;const finalH=Math.min(imgH,availH);const finalW=imgH>availH?(availH/imgH)*imgW:imgW;const xOff=margin+(contentW-finalW)/2;addPage(tabName);pdf.addImage(imgData,"JPEG",xOff,headerH,finalW,finalH);}
     function drawContentTable(){
