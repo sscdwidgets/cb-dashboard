@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CommandBar Analytics Dashboard v2.2</title>
+<title>CommandBar Analytics Dashboard v2.2.1</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -139,7 +139,7 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div id="tab-companies" class="hidden"></div>
   <div id="tab-map" class="hidden"></div>
 
-  <div class="footer" id="footer">CommandBar Analytics Dashboard v2.2 · Powered by SiteImprove Events · SouthState Correspondent</div>
+  <div class="footer" id="footer">CommandBar Analytics Dashboard v2.2.1 · Powered by SiteImprove Events · SouthState Correspondent</div>
 </div>
 
 <script>
@@ -955,25 +955,26 @@ function renderStateList(container){
       var svgEl=mapDiv.querySelector("svg");
       if(svgEl){
         svgEl.setAttribute("width","100%");
-        svgEl.setAttribute("height","auto");
+        svgEl.removeAttribute("height");
         svgEl.style.maxHeight="450px";
+        svgEl.style.display="block";
+        svgEl.style.margin="0 auto";
       }
       // Color and wire up each state path
       var paths=mapDiv.querySelectorAll("path[id]");
       paths.forEach(function(p){
-        var stId=p.getAttribute("id").toUpperCase();
+        var stId=(p.getAttribute("data-id")||p.getAttribute("id")||"").toUpperCase();
         var sd=mapStateData[stId];
         if(sd){
           var n=sd.companies.length;
           var fill=n>=7?"#002D72":n>=4?"#0960BB":n>=2?"#4A90D9":"#A3C4E9";
-          p.setAttribute("fill",fill);
+          p.style.fill=fill;
           p.style.cursor="pointer";
           p.style.transition="fill .2s ease, stroke .2s ease";
-          p.setAttribute("stroke","#fff");
-          p.setAttribute("stroke-width","1");
+          p.style.stroke="#fff";p.style.strokeWidth="1";
           p.addEventListener("click",function(){mapDrillState(stId);});
           p.addEventListener("mouseenter",function(e){
-            p.setAttribute("fill","#FFBF3F");
+            p.style.fill="#FFBF3F";
             var tip=document.getElementById("map-tooltip");
             if(tip){
               tip.style.display="block";
@@ -993,14 +994,13 @@ function renderStateList(container){
           });
           p.addEventListener("mouseleave",function(){
             var n2=sd.companies.length;
-            p.setAttribute("fill",n2>=7?"#002D72":n2>=4?"#0960BB":n2>=2?"#4A90D9":"#A3C4E9");
+            p.style.fill=n2>=7?"#002D72":n2>=4?"#0960BB":n2>=2?"#4A90D9":"#A3C4E9";
             var tip=document.getElementById("map-tooltip");
             if(tip)tip.style.display="none";
           });
         }else{
-          p.setAttribute("fill","#E8ECF0");
-          p.setAttribute("stroke","#fff");
-          p.setAttribute("stroke-width","1");
+          p.style.fill="#E8ECF0";
+          p.style.stroke="#fff";p.style.strokeWidth="1";
         }
       });
     })
@@ -1660,7 +1660,7 @@ async function exportPDF(){
       pdf.setFillColor(0,45,114);
       pdf.rect(0,0,pw,18,"F");
       pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);
-      pdf.text("CommandBar Analytics v2.2",margin,12);
+      pdf.text("CommandBar Analytics v2.2.1",margin,12);
       pdf.setFont("helvetica","normal");pdf.setFontSize(9);
       pdf.text((PERIOD?PERIOD+" \u00b7 ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});
       pdf.setFillColor(9,96,187);
@@ -1671,7 +1671,7 @@ async function exportPDF(){
     }
     function drawFooter(n){
       pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);
-      pdf.text("CommandBar Analytics Dashboard v2.2 \u00b7 SiteImprove Events",margin,ph-5);
+      pdf.text("CommandBar Analytics Dashboard v2.2.1 \u00b7 SiteImprove Events",margin,ph-5);
       pdf.text("Page "+n,pw-margin,ph-5,{align:"right"});
     }
 
