@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CommandBar Analytics Dashboard v2.4.9</title>
+<title>CommandBar Analytics Dashboard v2.4.10</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -116,7 +116,7 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div class="header">
     <div class="header-left">
       <div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
-      <div style="position:relative;display:inline-block"><div class="title">CommandBar Analytics<span style="margin-left:10px;font-size:11px;font-weight:300;letter-spacing:.5px;color:rgba(255,255,255,0.35);vertical-align:middle">v2.4.9</span></div><div class="subtitle" id="period-label">SouthState Correspondent</div></div>
+      <div style="position:relative;display:inline-block"><div class="title">CommandBar Analytics<span style="margin-left:10px;font-size:11px;font-weight:300;letter-spacing:.5px;color:rgba(255,255,255,0.35);vertical-align:middle">v2.4.10</span></div><div class="subtitle" id="period-label">SouthState Correspondent</div></div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <div style="display:flex;gap:4px;align-items:center">
@@ -164,7 +164,7 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div id="tab-companies" class="hidden"></div>
   <div id="tab-map" class="hidden"></div>
 
-  <div class="footer" id="footer">CommandBar Analytics Dashboard v2.4.9 · Powered by SiteImprove Events + Leadfeeder · SouthState Correspondent</div>
+  <div class="footer" id="footer">CommandBar Analytics Dashboard v2.4.10 · Powered by SiteImprove Events + Leadfeeder · SouthState Correspondent</div>
 </div>
 
 <script>
@@ -1012,7 +1012,12 @@ function renderCompanyPages(el,visits){
             });
           }
         }
-        html+='<span style="font-size:11px;color:#1A1A2E;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+pageLabel+'</span>';
+        var pageHref=p.page_path?("https://www.southstatecorrespondent.com"+p.page_path):"";
+        if(pageHref){
+          html+='<a href="'+pageHref+'" target="_blank" rel="noopener" style="font-size:11px;color:#0960BB;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-decoration:none" title="'+pageHref+'">'+pageLabel+'</a>';
+        } else {
+          html+='<span style="font-size:11px;color:#1A1A2E;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+pageLabel+'</span>';
+        }
         if(utmSfc){
           var sfUrl="https://southstatecorrespondent.lightning.force.com/"+utmSfc;
           html+='<a href="'+sfUrl+'" target="_blank" rel="noopener" style="font-size:10px;color:#0960BB;font-weight:600;white-space:nowrap;text-decoration:none;flex-shrink:0;margin-left:8px;padding:1px 7px;border:1px solid #0960BB22;border-radius:4px">View Contact ↗</a>';
@@ -1518,8 +1523,8 @@ async function exportPDF(){
   btn.innerHTML="Generating...";btn.style.opacity=".6";btn.style.pointerEvents="none";
   try{
     const {jsPDF}=window.jspdf;const pdf=new jsPDF("l","mm","a4");const pw=pdf.internal.pageSize.getWidth();const ph=pdf.internal.pageSize.getHeight();const margin=12;const contentW=pw-margin*2;const headerH=27;const footerH=8;const availH=ph-headerH-footerH;let pageCount=0;
-    function drawHeader(title,contd){pdf.setFillColor(0,45,114);pdf.rect(0,0,pw,18,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);pdf.text("CommandBar Analytics v2.4.9",margin,12);pdf.setFont("helvetica","normal");pdf.setFontSize(9);pdf.text((PERIOD?PERIOD+" · ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});pdf.setFillColor(9,96,187);pdf.rect(0,18,pw,6,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(8);pdf.setTextColor(255,255,255);pdf.text(title.toUpperCase()+(contd?" (CONTINUED)":""),margin,22.5);pdf.setTextColor(0,0,0);}
-    function drawFooter(n){pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);pdf.text("CommandBar Analytics Dashboard v2.4.9 · SiteImprove Events",margin,ph-5);pdf.text("Page "+n,pw-margin,ph-5,{align:"right"});}
+    function drawHeader(title,contd){pdf.setFillColor(0,45,114);pdf.rect(0,0,pw,18,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);pdf.text("CommandBar Analytics v2.4.10",margin,12);pdf.setFont("helvetica","normal");pdf.setFontSize(9);pdf.text((PERIOD?PERIOD+" · ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});pdf.setFillColor(9,96,187);pdf.rect(0,18,pw,6,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(8);pdf.setTextColor(255,255,255);pdf.text(title.toUpperCase()+(contd?" (CONTINUED)":""),margin,22.5);pdf.setTextColor(0,0,0);}
+    function drawFooter(n){pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);pdf.text("CommandBar Analytics Dashboard v2.4.10 · SiteImprove Events",margin,ph-5);pdf.text("Page "+n,pw-margin,ph-5,{align:"right"});}
     function addPage(title,contd){if(pageCount>0)pdf.addPage();pageCount++;drawHeader(title,contd||false);drawFooter(pageCount);}
     async function captureAndAdd(el,tabName){const canvas=await html2canvas(el,{scale:2,backgroundColor:"#F5F7FA",useCORS:true,logging:false,windowWidth:980});const imgData=canvas.toDataURL("image/jpeg",0.92);const imgW=contentW;const imgH=(canvas.height/canvas.width)*contentW;const finalH=Math.min(imgH,availH);const finalW=imgH>availH?(availH/imgH)*imgW:imgW;const xOff=margin+(contentW-finalW)/2;addPage(tabName);pdf.addImage(imgData,"JPEG",xOff,headerH,finalW,finalH);}
     function drawContentTable(){
