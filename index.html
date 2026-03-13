@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CommandBar Analytics Dashboard v2.1</title>
+<title>CommandBar Analytics Dashboard v2.2</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -139,7 +139,7 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div id="tab-companies" class="hidden"></div>
   <div id="tab-map" class="hidden"></div>
 
-  <div class="footer" id="footer">CommandBar Analytics Dashboard v2.1 · Powered by SiteImprove Events · SouthState Correspondent</div>
+  <div class="footer" id="footer">CommandBar Analytics Dashboard v2.2 · Powered by SiteImprove Events · SouthState Correspondent</div>
 </div>
 
 <script>
@@ -913,28 +913,101 @@ function renderStateList(container){
   var states=Object.keys(mapStateData).sort(function(a,b){return mapStateData[b].companies.length-mapStateData[a].companies.length});
   var maxCos=states.length>0?mapStateData[states[0]].companies.length:1;
 
-  var html='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">';
+  // Build the SVG map approach: fetch from CDN
+  var html='<div style="position:relative">';
+  html+='<div id="us-map-svg" style="width:100%;max-width:800px;margin:0 auto"></div>';
+  html+='<div id="map-tooltip" style="display:none;position:absolute;padding:8px 12px;background:#002D72;color:#fff;border-radius:6px;font-size:12px;font-weight:600;pointer-events:none;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,.2)"></div>';
+  html+='</div>';
+
+  // Legend
+  html+='<div style="display:flex;justify-content:center;gap:16px;margin-top:12px;flex-wrap:wrap">';
+  html+='<span style="font-size:10px;color:#8A9099;display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#E8ECF0"></span> No visitors</span>';
+  html+='<span style="font-size:10px;color:#8A9099;display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#A3C4E9"></span> 1 company</span>';
+  html+='<span style="font-size:10px;color:#8A9099;display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#4A90D9"></span> 2-3</span>';
+  html+='<span style="font-size:10px;color:#8A9099;display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#0960BB"></span> 4-6</span>';
+  html+='<span style="font-size:10px;color:#8A9099;display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#002D72"></span> 7+</span>';
+  html+='</div>';
+
+  // State cards below map
+  html+='<div style="margin-top:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px">';
   states.forEach(function(sc){
     var sd=mapStateData[sc];
-    var pct=Math.round((sd.companies.length/maxCos)*100);
-    var heat=sd.companies.length>=5?"#002D72":sd.companies.length>=3?"#0960BB":sd.companies.length>=2?"#4A90D9":"#A3C4E9";
-    html+='<div onclick="mapDrillState(\''+sc+'\')" style="cursor:pointer;padding:12px;border-radius:10px;border:1px solid #E8ECF0;background:#fff;transition:all .15s" onmouseover="this.style.borderColor=\'#0960BB\';this.style.boxShadow=\'0 2px 8px rgba(9,96,187,.12)\'" onmouseout="this.style.borderColor=\'#E8ECF0\';this.style.boxShadow=\'none\'">';
-    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
-    html+='<span style="font-size:14px;font-weight:700;color:#002D72">'+sc+'</span>';
-    html+='<span style="font-size:20px;font-weight:800;color:'+heat+'">'+sd.companies.length+'</span>';
-    html+='</div>';
-    html+='<div style="font-size:10px;color:#8A9099;margin-bottom:6px">'+sd.name+'</div>';
-    html+='<div style="height:4px;background:#F0F2F5;border-radius:2px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+heat+';border-radius:2px"></div></div>';
-    var cityCount=Object.keys(sd.cities).length;
-    html+='<div style="font-size:9px;color:#8A9099;margin-top:4px">'+cityCount+' cit'+(cityCount===1?'y':'ies')+'</div>';
+    var heat=sd.companies.length>=7?"#002D72":sd.companies.length>=4?"#0960BB":sd.companies.length>=2?"#4A90D9":"#A3C4E9";
+    html+='<div onclick="mapDrillState(\''+sc+'\')" style="cursor:pointer;padding:8px;border-radius:8px;border:1px solid #E8ECF0;background:#fff;display:flex;align-items:center;gap:6px;transition:all .15s" onmouseover="this.style.borderColor=\'#0960BB\'" onmouseout="this.style.borderColor=\'#E8ECF0\'">';
+    html+='<span style="font-size:13px;font-weight:700;color:'+heat+'">'+sc+'</span>';
+    html+='<span style="font-size:11px;color:#8A9099;flex:1">'+sd.companies.length+'</span>';
     html+='</div>';
   });
   html+='</div>';
 
-  if(states.length===0)html='<div style="text-align:center;padding:40px;color:#8A9099;font-size:12px">No banking companies with location data. Update the Leadfeeder Worker to v1.1 to capture location.</div>';
+  if(states.length===0)html='<div style="text-align:center;padding:40px;color:#8A9099;font-size:12px">No banking companies with location data found. Deploy Leadfeeder Worker v1.1 to capture location.</div>';
 
   container.innerHTML=html;
   document.getElementById("map-detail").innerHTML="";
+
+  // Fetch SVG map from simplemaps (MIT license, free commercial use)
+  var mapDiv=document.getElementById("us-map-svg");
+  if(mapDiv){
+    fetch("https://simplemaps.com/static/svg/us/us.svg")
+    .then(function(r){return r.text()})
+    .then(function(svg){
+      mapDiv.innerHTML=svg;
+      var svgEl=mapDiv.querySelector("svg");
+      if(svgEl){
+        svgEl.setAttribute("width","100%");
+        svgEl.setAttribute("height","auto");
+        svgEl.style.maxHeight="450px";
+      }
+      // Color and wire up each state path
+      var paths=mapDiv.querySelectorAll("path[id]");
+      paths.forEach(function(p){
+        var stId=p.getAttribute("id").toUpperCase();
+        var sd=mapStateData[stId];
+        if(sd){
+          var n=sd.companies.length;
+          var fill=n>=7?"#002D72":n>=4?"#0960BB":n>=2?"#4A90D9":"#A3C4E9";
+          p.setAttribute("fill",fill);
+          p.style.cursor="pointer";
+          p.style.transition="fill .2s ease, stroke .2s ease";
+          p.setAttribute("stroke","#fff");
+          p.setAttribute("stroke-width","1");
+          p.addEventListener("click",function(){mapDrillState(stId);});
+          p.addEventListener("mouseenter",function(e){
+            p.setAttribute("fill","#FFBF3F");
+            var tip=document.getElementById("map-tooltip");
+            if(tip){
+              tip.style.display="block";
+              tip.innerHTML=stId+" \u2014 "+sd.name+"<br>"+n+" compan"+(n===1?"y":"ies");
+              var rect=mapDiv.getBoundingClientRect();
+              tip.style.left=(e.clientX-rect.left+10)+"px";
+              tip.style.top=(e.clientY-rect.top-40)+"px";
+            }
+          });
+          p.addEventListener("mousemove",function(e){
+            var tip=document.getElementById("map-tooltip");
+            if(tip){
+              var rect=mapDiv.getBoundingClientRect();
+              tip.style.left=(e.clientX-rect.left+10)+"px";
+              tip.style.top=(e.clientY-rect.top-40)+"px";
+            }
+          });
+          p.addEventListener("mouseleave",function(){
+            var n2=sd.companies.length;
+            p.setAttribute("fill",n2>=7?"#002D72":n2>=4?"#0960BB":n2>=2?"#4A90D9":"#A3C4E9");
+            var tip=document.getElementById("map-tooltip");
+            if(tip)tip.style.display="none";
+          });
+        }else{
+          p.setAttribute("fill","#E8ECF0");
+          p.setAttribute("stroke","#fff");
+          p.setAttribute("stroke-width","1");
+        }
+      });
+    })
+    .catch(function(err){
+      mapDiv.innerHTML='<div style="text-align:center;padding:20px;color:#8A9099;font-size:11px">Map SVG could not be loaded. State cards below still work.</div>';
+    });
+  }
 }
 
 function mapDrillState(sc){
@@ -1587,7 +1660,7 @@ async function exportPDF(){
       pdf.setFillColor(0,45,114);
       pdf.rect(0,0,pw,18,"F");
       pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);
-      pdf.text("CommandBar Analytics v2.1",margin,12);
+      pdf.text("CommandBar Analytics v2.2",margin,12);
       pdf.setFont("helvetica","normal");pdf.setFontSize(9);
       pdf.text((PERIOD?PERIOD+" \u00b7 ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});
       pdf.setFillColor(9,96,187);
@@ -1598,7 +1671,7 @@ async function exportPDF(){
     }
     function drawFooter(n){
       pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);
-      pdf.text("CommandBar Analytics Dashboard v2.1 \u00b7 SiteImprove Events",margin,ph-5);
+      pdf.text("CommandBar Analytics Dashboard v2.2 \u00b7 SiteImprove Events",margin,ph-5);
       pdf.text("Page "+n,pw-margin,ph-5,{align:"right"});
     }
 
