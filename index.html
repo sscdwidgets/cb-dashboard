@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CommandBar Analytics Dashboard v2.0.1</title>
+<title>CommandBar Analytics Dashboard v2.1</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -126,6 +126,7 @@ tbody tr:nth-child(even){background:#FAFBFC}
     <button class="tab" data-tab="historical">Compare</button>
     <button class="tab" data-tab="leaderboard">Trending</button>
     <button class="tab" data-tab="companies">Companies</button>
+    <button class="tab" data-tab="map">Map</button>
   </div>
 
   <!-- Tab Panels -->
@@ -136,8 +137,9 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div id="tab-historical" class="hidden"></div>
   <div id="tab-leaderboard" class="hidden"></div>
   <div id="tab-companies" class="hidden"></div>
+  <div id="tab-map" class="hidden"></div>
 
-  <div class="footer" id="footer">CommandBar Analytics Dashboard v2.0.1 · Powered by SiteImprove Events · SouthState Correspondent</div>
+  <div class="footer" id="footer">CommandBar Analytics Dashboard v2.1 · Powered by SiteImprove Events · SouthState Correspondent</div>
 </div>
 
 <script>
@@ -568,6 +570,21 @@ function render(){
   document.getElementById("tab-companies").innerHTML=chtml;
   if(companiesData)renderCompaniesTable();
 
+  // ── MAP TAB ──
+  var mhtml='<div class="charts"><div class="chart-card" style="flex:1 1 100%">';
+  mhtml+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">';
+  mhtml+='<div id="map-breadcrumb"><span class="chart-title" style="margin-bottom:0">Bank Visitor Map</span></div>';
+  mhtml+='<div style="display:flex;gap:6px;align-items:center">';
+  mhtml+='<button id="map-back-btn" onclick="mapGoBack()" style="display:none;padding:4px 12px;border-radius:6px;border:1px solid #E8ECF0;background:#fff;font-size:11px;cursor:pointer;color:#0960BB;font-weight:600">\u2190 Back</button>';
+  mhtml+='<button class="import-btn" onclick="fetchMapData()" style="background:#2E7D32;padding:5px 12px;font-size:11px">Load Map Data</button>';
+  mhtml+='</div></div>';
+  mhtml+='<div id="map-status" style="font-size:11px;color:#8A9099;margin-bottom:8px"></div>';
+  mhtml+='<div id="map-container" style="position:relative;width:100%;min-height:400px"></div>';
+  mhtml+='</div></div>';
+  mhtml+='<div id="map-detail" style="margin-top:8px"></div>';
+  document.getElementById("tab-map").innerHTML=mhtml;
+  if(companiesData&&mapStateData)renderUSMap();
+
 }
 
 // ── COMPANIES ──
@@ -806,6 +823,197 @@ function renderCompanyPages(el,visits){
   });
 
   el.innerHTML=html;
+}
+
+// ── MAP ──
+var mapStateData=null;
+var mapCurrentView="us"; // "us", "state", "city"
+var mapCurrentState="";
+var mapCurrentCity="";
+
+var US_STATES={
+  "AL":"Alabama","AK":"Alaska","AZ":"Arizona","AR":"Arkansas","CA":"California","CO":"Colorado","CT":"Connecticut","DE":"Delaware","FL":"Florida","GA":"Georgia","HI":"Hawaii","ID":"Idaho","IL":"Illinois","IN":"Indiana","IA":"Iowa","KS":"Kansas","KY":"Kentucky","LA":"Louisiana","ME":"Maine","MD":"Maryland","MA":"Massachusetts","MI":"Michigan","MN":"Minnesota","MS":"Mississippi","MO":"Missouri","MT":"Montana","NE":"Nebraska","NV":"Nevada","NH":"New Hampshire","NJ":"New Jersey","NM":"New Mexico","NY":"New York","NC":"North Carolina","ND":"North Dakota","OH":"Ohio","OK":"Oklahoma","OR":"Oregon","PA":"Pennsylvania","RI":"Rhode Island","SC":"South Carolina","SD":"South Dakota","TN":"Tennessee","TX":"Texas","UT":"Utah","VT":"Vermont","VA":"Virginia","WA":"Washington","WV":"West Virginia","WI":"Wisconsin","WY":"Wyoming","DC":"District of Columbia"
+};
+
+var STATE_NAMES={};
+Object.keys(US_STATES).forEach(function(k){STATE_NAMES[US_STATES[k].toLowerCase()]=k;STATE_NAMES[k.toLowerCase()]=k;});
+
+function resolveStateCode(c){
+  if(!c.state&&!c.state_code)return"";
+  if(c.state_code&&c.state_code.length===2)return c.state_code.toUpperCase();
+  var s=(c.state||"").toLowerCase().trim();
+  if(STATE_NAMES[s])return STATE_NAMES[s];
+  // Try matching partial
+  var keys=Object.keys(US_STATES);
+  for(var i=0;i<keys.length;i++){if(US_STATES[keys[i]].toLowerCase().indexOf(s)>-1)return keys[i];}
+  return"";
+}
+
+async function fetchMapData(){
+  var status=document.getElementById("map-status");
+  if(companiesData){
+    buildMapStateData();
+    return;
+  }
+  if(status)status.textContent="Loading companies for map...";
+  await fetchCompanies();
+  buildMapStateData();
+}
+
+function buildMapStateData(){
+  var status=document.getElementById("map-status");
+  if(!companiesData){if(status)status.innerHTML='<span style="color:#E53935">No company data loaded.</span>';return;}
+
+  mapStateData={};
+  var unmapped=0;
+  companiesData.forEach(function(c){
+    // Only banking/financial
+    var ind=(c.industry||"").toLowerCase();
+    if(!(ind.indexOf("bank")>-1||ind.indexOf("financial")>-1||ind.indexOf("credit")>-1||ind.indexOf("investment")>-1))return;
+    // Skip internal
+    if(INTERNAL_NAMES.some(function(n){return c.name.indexOf(n)>-1}))return;
+    var sc=resolveStateCode(c);
+    if(!sc||!US_STATES[sc]){unmapped++;return;}
+    if(!mapStateData[sc])mapStateData[sc]={code:sc,name:US_STATES[sc],companies:[],cities:{}};
+    mapStateData[sc].companies.push(c);
+    var city=c.city||"Unknown";
+    if(!mapStateData[sc].cities[city])mapStateData[sc].cities[city]=[];
+    mapStateData[sc].cities[city].push(c);
+  });
+
+  var stateCount=Object.keys(mapStateData).length;
+  var totalCos=Object.keys(mapStateData).reduce(function(s,k){return s+mapStateData[k].companies.length},0);
+  if(status)status.innerHTML='<span style="color:#2E7D32">'+totalCos+' banking companies across '+stateCount+' states.'+(unmapped>0?' ('+unmapped+' without location data)':'')+'</span>';
+
+  mapCurrentView="us";
+  renderUSMap();
+}
+
+function renderUSMap(){
+  var container=document.getElementById("map-container");
+  var backBtn=document.getElementById("map-back-btn");
+  var breadcrumb=document.getElementById("map-breadcrumb");
+  if(!container||!mapStateData)return;
+
+  if(backBtn)backBtn.style.display=mapCurrentView==="us"?"none":"";
+
+  if(mapCurrentView==="us"){
+    if(breadcrumb)breadcrumb.innerHTML='<span class="chart-title" style="margin-bottom:0">Bank Visitor Map \u2014 United States</span>';
+    renderStateList(container);
+  }else if(mapCurrentView==="state"){
+    if(breadcrumb)breadcrumb.innerHTML='<span class="chart-title" style="margin-bottom:0">Bank Visitor Map \u2014 '+US_STATES[mapCurrentState]+'</span>';
+    renderCityList(container,mapCurrentState);
+  }else if(mapCurrentView==="city"){
+    if(breadcrumb)breadcrumb.innerHTML='<span class="chart-title" style="margin-bottom:0">Bank Visitor Map \u2014 '+US_STATES[mapCurrentState]+' \u203a '+mapCurrentCity+'</span>';
+    renderCityCompanies(container,mapCurrentState,mapCurrentCity);
+  }
+}
+
+function renderStateList(container){
+  var states=Object.keys(mapStateData).sort(function(a,b){return mapStateData[b].companies.length-mapStateData[a].companies.length});
+  var maxCos=states.length>0?mapStateData[states[0]].companies.length:1;
+
+  var html='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">';
+  states.forEach(function(sc){
+    var sd=mapStateData[sc];
+    var pct=Math.round((sd.companies.length/maxCos)*100);
+    var heat=sd.companies.length>=5?"#002D72":sd.companies.length>=3?"#0960BB":sd.companies.length>=2?"#4A90D9":"#A3C4E9";
+    html+='<div onclick="mapDrillState(\''+sc+'\')" style="cursor:pointer;padding:12px;border-radius:10px;border:1px solid #E8ECF0;background:#fff;transition:all .15s" onmouseover="this.style.borderColor=\'#0960BB\';this.style.boxShadow=\'0 2px 8px rgba(9,96,187,.12)\'" onmouseout="this.style.borderColor=\'#E8ECF0\';this.style.boxShadow=\'none\'">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
+    html+='<span style="font-size:14px;font-weight:700;color:#002D72">'+sc+'</span>';
+    html+='<span style="font-size:20px;font-weight:800;color:'+heat+'">'+sd.companies.length+'</span>';
+    html+='</div>';
+    html+='<div style="font-size:10px;color:#8A9099;margin-bottom:6px">'+sd.name+'</div>';
+    html+='<div style="height:4px;background:#F0F2F5;border-radius:2px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+heat+';border-radius:2px"></div></div>';
+    var cityCount=Object.keys(sd.cities).length;
+    html+='<div style="font-size:9px;color:#8A9099;margin-top:4px">'+cityCount+' cit'+(cityCount===1?'y':'ies')+'</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+
+  if(states.length===0)html='<div style="text-align:center;padding:40px;color:#8A9099;font-size:12px">No banking companies with location data. Update the Leadfeeder Worker to v1.1 to capture location.</div>';
+
+  container.innerHTML=html;
+  document.getElementById("map-detail").innerHTML="";
+}
+
+function mapDrillState(sc){
+  mapCurrentState=sc;
+  mapCurrentView="state";
+  renderUSMap();
+}
+
+function renderCityList(container,sc){
+  var sd=mapStateData[sc];
+  if(!sd){container.innerHTML="No data.";return;}
+
+  var cities=Object.keys(sd.cities).sort(function(a,b){return sd.cities[b].length-sd.cities[a].length});
+  var maxCos=cities.length>0?sd.cities[cities[0]].length:1;
+
+  var html='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">';
+  cities.forEach(function(city){
+    var cos=sd.cities[city];
+    var pct=Math.round((cos.length/maxCos)*100);
+    html+='<div onclick="mapDrillCity(\''+city.replace(/'/g,"\\'")+'\')" style="cursor:pointer;padding:12px;border-radius:10px;border:1px solid #E8ECF0;background:#fff;transition:all .15s" onmouseover="this.style.borderColor=\'#0960BB\';this.style.boxShadow=\'0 2px 8px rgba(9,96,187,.12)\'" onmouseout="this.style.borderColor=\'#E8ECF0\';this.style.boxShadow=\'none\'">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
+    html+='<span style="font-size:13px;font-weight:600;color:#1A1A2E">'+city+'</span>';
+    html+='<span style="font-size:18px;font-weight:800;color:#0960BB">'+cos.length+'</span>';
+    html+='</div>';
+    html+='<div style="height:4px;background:#F0F2F5;border-radius:2px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:#0960BB;border-radius:2px"></div></div>';
+    // Show first 3 company names
+    html+='<div style="margin-top:6px">';
+    cos.slice(0,3).forEach(function(c){
+      html+='<div style="font-size:10px;color:#8A9099;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\u2022 '+c.name+'</div>';
+    });
+    if(cos.length>3)html+='<div style="font-size:10px;color:#8A9099">+'+(cos.length-3)+' more</div>';
+    html+='</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  container.innerHTML=html;
+  document.getElementById("map-detail").innerHTML="";
+}
+
+function mapDrillCity(city){
+  mapCurrentCity=city;
+  mapCurrentView="city";
+  renderUSMap();
+}
+
+function renderCityCompanies(container,sc,city){
+  var sd=mapStateData[sc];
+  if(!sd||!sd.cities[city]){container.innerHTML="No data.";return;}
+
+  var cos=sd.cities[city];
+  var html='<div style="display:flex;flex-direction:column;gap:8px">';
+  cos.forEach(function(c){
+    var qColor=c.quality>=8?"#2E7D32":c.quality>=5?"#0960BB":c.quality>=3?"#FFBF3F":"#8A9099";
+    var empLabel=c.employee_count?c.employee_count>=10001?"10k+":c.employee_count>=1000?Math.round(c.employee_count/1000)+"k":String(c.employee_count):"\u2013";
+    html+='<div style="padding:12px;border-radius:10px;border:1px solid #E8ECF0;background:#fff">';
+    html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">';
+    if(c.logo_url)html+='<img src="'+c.logo_url+'" style="width:32px;height:32px;border-radius:6px;object-fit:contain;background:#F5F7FA" onerror="this.style.display=\'none\'">';
+    html+='<div style="flex:1"><div style="font-size:14px;font-weight:700;color:#002D72">'+c.name+'</div>';
+    html+='<div style="font-size:10px;color:#8A9099">'+(c.industry||"")+(c.employee_count?" \u00b7 "+empLabel+" employees":"")+'</div></div>';
+    html+='<span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;font-size:14px;font-weight:700;background:'+qColor+'14;color:'+qColor+'">'+c.quality+'</span>';
+    html+='</div>';
+    html+='<div style="display:flex;gap:8px;flex-wrap:wrap;font-size:10px;color:#8A9099">';
+    html+='<span>Last visit: '+(c.last_visit_date||"\u2013")+'</span>';
+    if(c.website_url)html+='<a href="'+c.website_url+'" target="_blank" style="color:#0960BB;text-decoration:none">'+c.website_url.replace(/^https?:\/\//,"").replace(/\/+$/,"")+'</a>';
+    html+='</div>';
+    // Pages expand
+    var pagesId="map-pages-"+c.id.replace(/[^a-zA-Z0-9]/g,"").slice(0,20);
+    html+='<div style="margin-top:8px"><button onclick="toggleCompanyPages(\''+c.id+'\',\''+pagesId+'\')" style="padding:3px 10px;border-radius:6px;border:1px solid #E8ECF0;background:#fff;font-size:10px;cursor:pointer;color:#0960BB;font-weight:600">\u25BC View Pages</button></div>';
+    html+='<div id="'+pagesId+'" style="display:none"><div id="'+pagesId+'-content" style="padding:8px 0;font-size:11px;color:#8A9099">Loading...</div></div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  container.innerHTML=html;
+}
+
+function mapGoBack(){
+  if(mapCurrentView==="city"){mapCurrentView="state";mapCurrentCity="";}
+  else if(mapCurrentView==="state"){mapCurrentView="us";mapCurrentState="";}
+  renderUSMap();
 }
 
 // ── HISTORICAL FETCH ──
@@ -1237,7 +1445,7 @@ document.querySelectorAll("#tabs-bar .tab").forEach(btn=>{
     document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
     btn.classList.add("active");
     currentTab=btn.dataset.tab;
-    ["overview","content","insights","engagement","historical","leaderboard","companies"].forEach(t=>{
+    ["overview","content","insights","engagement","historical","leaderboard","companies","map"].forEach(t=>{
       document.getElementById("tab-"+t).classList.toggle("hidden",t!==currentTab);
     });
     // Auto-load historical data when tab is opened for the first time
@@ -1252,6 +1460,12 @@ document.querySelectorAll("#tabs-bar .tab").forEach(btn=>{
     }
     if(currentTab==="companies" && companiesData){
       renderCompaniesTable();
+    }
+    if(currentTab==="map" && !companiesData){
+      setTimeout(fetchMapData,100);
+    }
+    if(currentTab==="map" && companiesData && mapStateData){
+      renderUSMap();
     }
   });
 });
@@ -1373,7 +1587,7 @@ async function exportPDF(){
       pdf.setFillColor(0,45,114);
       pdf.rect(0,0,pw,18,"F");
       pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);
-      pdf.text("CommandBar Analytics v2.0.1",margin,12);
+      pdf.text("CommandBar Analytics v2.1",margin,12);
       pdf.setFont("helvetica","normal");pdf.setFontSize(9);
       pdf.text((PERIOD?PERIOD+" \u00b7 ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});
       pdf.setFillColor(9,96,187);
@@ -1384,7 +1598,7 @@ async function exportPDF(){
     }
     function drawFooter(n){
       pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);
-      pdf.text("CommandBar Analytics Dashboard v2.0.1 \u00b7 SiteImprove Events",margin,ph-5);
+      pdf.text("CommandBar Analytics Dashboard v2.1 \u00b7 SiteImprove Events",margin,ph-5);
       pdf.text("Page "+n,pw-margin,ph-5,{align:"right"});
     }
 
@@ -1513,8 +1727,8 @@ async function exportPDF(){
     }
 
     // ── Capture tabs ──
-    const tabs=["overview","content","insights","engagement","historical","leaderboard","companies"];
-    const tabNames=["Overview","Content","Performance","Activity","Compare","Trending","Companies"];
+    const tabs=["overview","content","insights","engagement","historical","leaderboard","companies","map"];
+    const tabNames=["Overview","Content","Performance","Activity","Compare","Trending","Companies","Map"];
     const savedTab=currentTab;
 
     for(let i=0;i<tabs.length;i++){
@@ -1547,7 +1761,7 @@ async function exportPDF(){
   }catch(err){
     console.error("PDF export error:",err);
     document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>PDF export failed: '+err.message+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
-    ["overview","content","insights","engagement","historical","leaderboard","companies"].forEach(t=>{
+    ["overview","content","insights","engagement","historical","leaderboard","companies","map"].forEach(t=>{
       const el=document.getElementById("tab-"+t);el.style.display="";
       el.classList.toggle("hidden",t!==currentTab);
     });
