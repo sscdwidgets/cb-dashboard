@@ -948,7 +948,7 @@ function renderStateList(container){
   // Fetch SVG map from simplemaps (MIT license, free commercial use)
   var mapDiv=document.getElementById("us-map-svg");
   if(mapDiv){
-    fetch("https://sscdwidgets.github.io/us-map.svg")
+    fetch("https://sscdwidgets.github.io/cb-dashboard/us.svg")
     .then(function(r){return r.text()})
     .then(function(svg){
       mapDiv.innerHTML=svg;
