@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CommandBar Analytics Dashboard v2.2.1</title>
+<title>CommandBar Analytics Dashboard v2.3.0</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -86,6 +86,14 @@ tbody tr:nth-child(even){background:#FAFBFC}
 .save-count{font-size:12px;font-weight:600;color:#002D72}
 .footer{text-align:center;font-size:10px;color:#8A9099;padding:16px 0 12px;margin-top:8px}
 .hidden{display:none}
+
+/* ── Feed selector ── */
+.feed-selector{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:10px 14px;background:#F0F4FA;border-radius:10px;margin-bottom:14px;border:1px solid #E0E8F4}
+.feed-selector-label{font-size:10px;font-weight:700;color:#8A9099;letter-spacing:.6px;text-transform:uppercase;margin-right:4px;flex-shrink:0}
+.feed-pill{padding:5px 14px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1.5px solid #E8ECF0;background:#fff;color:#8A9099;letter-spacing:.1px;transition:all .15s;white-space:nowrap}
+.feed-pill:hover{border-color:#0960BB;color:#0960BB;background:#0960BB08}
+.feed-pill.active{border-color:#002D72;background:#002D72;color:#fff}
+.feed-pill-loading{opacity:.5;pointer-events:none}
 </style>
 </head>
 <body>
@@ -139,7 +147,7 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div id="tab-companies" class="hidden"></div>
   <div id="tab-map" class="hidden"></div>
 
-  <div class="footer" id="footer">CommandBar Analytics Dashboard v2.2.1 · Powered by SiteImprove Events · SouthState Correspondent</div>
+  <div class="footer" id="footer">CommandBar Analytics Dashboard v2.3.0 · Powered by SiteImprove Events + Leadfeeder · SouthState Correspondent</div>
 </div>
 
 <script>
@@ -164,6 +172,84 @@ function badge(pct){
 function card(label,value,sub,accent){
   accent=accent||CL.navy;
   return `<div class="card"><div class="card-label">${label}</div><div class="card-value" style="color:${accent}">${value}</div>${sub?`<div class="card-sub">${sub}</div>`:""}</div>`;
+}
+
+// ── LEADFEEDER FEED STATE ──
+var LF_URL = "https://leadfeeder-proxy.jameswspence.workers.dev";
+
+var LF_FEEDS_STATIC = [
+  {id:"adc3fd58-9efb-11ec-a2e4-35bdf72110d7", name:"ICP"},
+  {id:"66d325bc-7306-11f0-9c64-5db4939f49ea", name:"Banking and Finance"},
+  {id:"d92ac4f6-9f08-11ec-b201-5dbc05743d4b", name:"ARC"},
+  {id:"715aff44-9f26-11ec-9d86-7515457aa63b", name:"Loan Command"},
+  {id:"3409ff36-15ce-11ed-ade3-47b1039f35fa", name:"ON FIRE"},
+];
+
+var lfFeeds = LF_FEEDS_STATIC.slice(); // will be updated from API on first load
+var currentLfFeed = null; // null = all / no feed filter
+var lfFeedsLoaded = false;
+
+// Fetch live feed list from Worker
+async function fetchLfFeeds(){
+  if(lfFeedsLoaded)return;
+  try{
+    var resp = await fetch(LF_URL+"/feeds");
+    var result = await resp.json();
+    if(result.data && result.data.length > 0){
+      lfFeeds = result.data.map(function(f){
+        return {id: f.id, name: f.name || f.id, lead_count: f.lead_count};
+      });
+    }
+    lfFeedsLoaded = true;
+  }catch(e){
+    // Falls back to static list — that's fine
+    lfFeedsLoaded = true;
+  }
+  // Re-render feed selectors if tabs are visible
+  renderFeedSelector("co-feed-selector", "companies");
+  renderFeedSelector("map-feed-selector", "map");
+}
+
+// Build the HTML for a feed selector pill row
+function feedSelectorHTML(domId, tabKey){
+  var html = '<div class="feed-selector" id="'+domId+'">';
+  html += '<span class="feed-selector-label">Feed</span>';
+  // "All" pill
+  var allActive = (currentLfFeed === null);
+  html += '<button class="feed-pill'+(allActive?' active':'')+'" onclick="setLfFeed(null,\''+tabKey+'\')">All</button>';
+  lfFeeds.forEach(function(f){
+    var isActive = (currentLfFeed === f.id);
+    var label = f.name + (f.lead_count !== undefined ? ' ('+f.lead_count+')' : '');
+    html += '<button class="feed-pill'+(isActive?' active':'')+'" onclick="setLfFeed(\''+f.id+'\',\''+tabKey+'\')">'+label+'</button>';
+  });
+  html += '</div>';
+  return html;
+}
+
+// Re-render just the feed selector bar in place (without full tab re-render)
+function renderFeedSelector(domId, tabKey){
+  var el = document.getElementById(domId);
+  if(!el) return;
+  el.outerHTML = feedSelectorHTML(domId, tabKey);
+}
+
+// Called when a feed pill is clicked
+function setLfFeed(feedId, tabKey){
+  currentLfFeed = feedId;
+  companiesData = null; // force re-fetch
+  mapStateData = null;
+  companyPagesCache = {};
+
+  // Re-render the feed selectors in both tabs immediately (pill state update)
+  renderFeedSelector("co-feed-selector", "companies");
+  renderFeedSelector("map-feed-selector", "map");
+
+  // Trigger the appropriate tab's data load
+  if(tabKey === "companies"){
+    fetchCompanies();
+  } else if(tabKey === "map"){
+    fetchMapData();
+  }
 }
 
 // ── PARSE ──
@@ -259,7 +345,6 @@ function render(){
   const pods=d.articles.filter(a=>a.type==="Podcast");
   const top5=d.articles.slice(0,5);
 
-  // Destroy old charts
   Object.values(charts).forEach(c=>c.destroy());
   charts={};
 
@@ -280,7 +365,6 @@ function render(){
   html+=`<div class="insights"><h3>Quick Insights</h3><div><div><strong>Reach:</strong> ${d.dailyVisits} unique daily visitors across ${d.dailyVisitors} sessions.</div><div><strong>Engagement:</strong> ${engRate}% of visitors opened the rail. ${d.articles.length} pieces tracked with ${deepPct}% engaged.</div><div><strong>Actions:</strong> ${d.shareTotal} shares, ${d.saveTotal} saves, ${d.clickTotal} navigation clicks.</div></div></div>`;
   document.getElementById("tab-overview").innerHTML=html;
 
-  // Charts
   const funnelData=[{l:"Daily Visitors",v:d.dailyVisits,c:CL.blue},{l:"Rail Opens",v:d.railOpens,c:CL.gold},{l:"Actions",v:d.actionsTotal,c:CL.green}];
   charts.funnel=new Chart(document.getElementById("c-funnel"),{type:"bar",data:{labels:funnelData.map(f=>f.l),datasets:[{data:funnelData.map(f=>f.v),backgroundColor:funnelData.map(f=>f.c),borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099"}},x:{grid:{display:false},ticks:{font:{size:11},color:"#8A9099"}}}}});
 
@@ -292,8 +376,6 @@ function render(){
 
   // ── ENGAGEMENT TAB ──
   let ehtml=`<div class="cards">${card("Daily Visitors",d.dailyVisits,d.dailyVisitors+" unique sessions",CL.blue)}${card("Rail Opens",d.railOpens,engRate+"% of visitors",CL.gold)}${card("Total Actions",d.actionsTotal,d.clickTotal+" clicks, "+d.saveTotal+" saves, "+d.shareTotal+" shares",CL.green)}${card("Nudges Shown",d.nudgeShown,d.nudgeDismiss+" dismissed",CL.navy)}</div>`;
-
-  // Conversion funnel + Feature usage
   ehtml+=`<div class="charts">`;
   ehtml+=`<div class="chart-card" style="flex:1 1 400px"><div class="chart-title">Conversion Funnel</div>`;
   const fSteps=funnelData;
@@ -306,8 +388,6 @@ function render(){
   ehtml+=`</div>`;
   ehtml+=`<div class="chart-card" style="flex:1 1 350px"><div class="chart-title">Feature Usage</div><div class="chart-wrap" style="height:${Math.max(140,d.actionBreakdown.length*28+20)}px"><canvas id="c-features"></canvas></div></div>`;
   ehtml+=`</div>`;
-
-  // Actions detail + Nudge performance
   ehtml+=`<div class="charts">`;
   ehtml+=`<div class="chart-card" style="flex:1 1 400px"><div class="chart-title">Actions Detail</div>`;
   d.actionDetail.forEach(item=>{
@@ -322,8 +402,6 @@ function render(){
   });
   ehtml+=`<div style="font-size:11px;color:#8A9099;margin-top:8px;line-height:1.5">Nudge triggers after 3 visits to loan/ARC content. Resets after each cycle.</div></div>`;
   ehtml+=`</div>`;
-
-  // Saved + Shared
   ehtml+=`<div class="charts"><div class="chart-card" style="flex:1 1 300px"><div class="chart-title">Saved Articles</div>`;
   if(d.saves.length)d.saves.forEach(sv=>{ehtml+=`<div class="save-item"><span class="save-dot" style="background:${CL.gold}"></span><span class="save-label">${sv.label}</span><span class="save-count">${sv.events}</span></div>`;});
   else ehtml+=`<div style="font-size:12px;color:#8A9099">No saves this period</div>`;
@@ -331,8 +409,6 @@ function render(){
   if(d.shares.length)[...d.shares].sort((a,b)=>b.events-a.events).forEach(sh=>{ehtml+=`<div class="save-item"><span class="save-dot" style="background:${CL.green}"></span><span class="save-label">${sh.label}</span><span class="save-count">${sh.events}</span></div>`;});
   else ehtml+=`<div style="font-size:12px;color:#8A9099">No shares this period</div>`;
   ehtml+=`</div></div>`;
-
-  // Insights
   const dropPct=d.dailyVisits>0?((1-d.railOpens/d.dailyVisits)*100).toFixed(0):0;
   const convPct=d.railOpens>0?Math.round(d.actionsTotal/d.railOpens*100):0;
   ehtml+=`<div class="insights"><div><strong>Funnel Analysis:</strong> ${d.dailyVisits} daily visitors, ${d.railOpens} opened the rail (${engRate}%). Once engaged, ${convPct}% took an action. ${d.nudgeShown} nudges shown${d.nudgeDismiss>0?", "+d.nudgeDismiss+" dismissed":""}. ${d.saveTotal+d.shareTotal>0?(d.saveTotal+d.shareTotal)+" saves/shares indicate content is being distributed to peers.":"No saves or shares yet."}</div></div>`;
@@ -340,6 +416,7 @@ function render(){
 
   const ab=d.actionBreakdown;
   charts.features=new Chart(document.getElementById("c-features"),{type:"bar",data:{labels:ab.map(a=>a.name),datasets:[{data:ab.map(a=>a.value),backgroundColor:ab.map(a=>a.color),borderRadius:6}]},options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099"}},y:{grid:{display:false},ticks:{font:{size:11},color:"#4C4C4C"}}}}});
+
   // ── INSIGHTS TAB ──
   const matrixArticles=d.articles.filter(a=>a.total>=1);
   const avgTotal=matrixArticles.length?matrixArticles.reduce((s,a)=>s+a.total,0)/matrixArticles.length:1;
@@ -353,11 +430,7 @@ function render(){
   });
 
   let ihtml=`<div class="cards">${card("Articles Tracked",matrixArticles.length,"Across all content types")}${card("Avg Events",avgTotal.toFixed(1),"Per article",CL.blue)}${card("Avg Engagement",Math.round(avgEng)+"%","Engaged rate",CL.gold)}${card("Hidden Gems",quadrants.monitor.length,"Low traffic, high engagement",CL.green)}</div>`;
-
-  // Scatter plot
   ihtml+=`<div class="charts"><div class="chart-card" style="flex:1 1 600px"><div class="chart-title">Content Performance Matrix</div><div style="font-size:11px;color:#8A9099;margin:-6px 0 10px">X = Total Events &nbsp;&middot;&nbsp; Y = Engagement % &nbsp;&middot;&nbsp; Dashed lines = averages</div><div class="chart-wrap" style="height:300px"><canvas id="c-matrix"></canvas></div></div></div>`;
-
-  // Quadrant cards
   ihtml+=`<div class="charts">`;
   const quads=[
     {key:"promote",icon:"\u2B50",title:"Stars",sub:"High traffic + high engagement \u2014 promote and replicate",color:CL.blue,bg:CL.blue+"0A"},
@@ -374,14 +447,10 @@ function render(){
         ihtml+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(0,0,0,.04)"><span style="font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:6px">${trunc(a.title,35)}</span><div style="display:flex;align-items:center;gap:6px;flex-shrink:0"><span class="type-tag" style="background:${tc}14;color:${tc};font-size:9px;padding:1px 6px">${a.type}</span><span style="font-size:11px;font-weight:600;color:#002D72">${a.total}</span><span style="font-size:11px;color:${a.engPct>=50?CL.blue:a.engPct>0?CL.gold:CL.red};font-weight:600">${a.engPct}%</span></div></div>`;
       });
       if(items.length>5)ihtml+=`<div style="font-size:10px;color:#8A9099;margin-top:4px">+${items.length-5} more</div>`;
-    } else {
-      ihtml+=`<div style="font-size:11px;color:#8A9099">None this period</div>`;
-    }
+    }else{ihtml+=`<div style="font-size:11px;color:#8A9099">None this period</div>`;}
     ihtml+=`</div>`;
   });
   ihtml+=`</div>`;
-
-  // Recommendations
   const topStar=quadrants.promote.sort((a,b)=>b.total-a.total)[0];
   const topGem=quadrants.monitor.sort((a,b)=>b.engPct-a.engPct)[0];
   const topFix=quadrants.optimize.sort((a,b)=>b.total-a.total)[0];
@@ -391,10 +460,7 @@ function render(){
   if(topFix)recs.push(`<strong>Needs attention:</strong> "${trunc(topFix.title,45)}" \u2014 ${topFix.total} events but only ${topFix.engPct}% engaged. Review content length, structure, or title match to content.`);
   if(recs.length===0)recs.push("Import data with content engagement events to see actionable recommendations.");
   ihtml+=`<div class="insights"><h3>Recommendations</h3><div>${recs.map(r=>"<div style=\"margin-bottom:6px\">"+r+"</div>").join("")}</div></div>`;
-
   document.getElementById("tab-insights").innerHTML=ihtml;
-
-  // Matrix scatter chart
   if(matrixArticles.length>0){
     const colors={Blog:CL.blue,Page:"#8A9099",Podcast:CL.gold};
     const types=[...new Set(matrixArticles.map(a=>a.type))];
@@ -418,8 +484,6 @@ function render(){
     cht+=`<span style="color:#8A9099">Total: ${ep.total}</span>${badge(ep.engPct)}</div></div>`;
   });}else{cht+=`<div style="font-size:12px;color:#8A9099;padding:16px 0">No podcast data this period.</div>`;}
   cht+=`</div></div></div><div id="content-table-wrap">`;
-
-  // Sortable table
   cht+=`<div class="chart-card" style="flex:1 1 100%;padding:0;overflow:hidden"><table id="content-table"><thead><tr>`;
   const cols=[{l:"Title",f:"title",c:"#8A9099",a:"left"},{l:"Type",f:"type",c:"#8A9099"},{l:"Engaged",f:"engaged",c:CL.blue},{l:"Skim",f:"skim",c:"#D4A017"},{l:"Bounce",f:"bounce",c:CL.red},{l:"Total",f:"total",c:"#8A9099"},{l:"Signal",f:"engPct",c:"#8A9099"}];
   cols.forEach(col=>{
@@ -444,17 +508,13 @@ function render(){
     cht+=`<td style="font-weight:700;color:#002D72">${a.total}</td><td>${badge(a.engPct)}</td></tr>`;
   });
   cht+=`</tbody></table>`;
-  if(sorted.length>25){
-    cht+=`<div style="text-align:center;padding:12px"><button id="content-show-more" style="padding:8px 24px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid #E8ECF0;background:#fff;color:#0960BB;letter-spacing:.2px">${contentShowAll?"Show Less (25)":"Show All ("+sorted.length+")"}</button></div>`;
-  }
+  if(sorted.length>25){cht+=`<div style="text-align:center;padding:12px"><button id="content-show-more" style="padding:8px 24px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid #E8ECF0;background:#fff;color:#0960BB;letter-spacing:.2px">${contentShowAll?"Show Less (25)":"Show All ("+sorted.length+")"}</button></div>`;}
   cht+=`</div></div>`;
   document.getElementById("tab-content").innerHTML=cht;
 
-  // Blog chart
   const b10=blogs.slice(0,10);
   charts.blogs=new Chart(document.getElementById("c-blogs"),{type:"bar",data:{labels:b10.map(b=>trunc(b.title,28)),datasets:[{label:"Engaged",data:b10.map(b=>b.engaged),backgroundColor:CL.blue},{label:"Skim",data:b10.map(b=>b.skim),backgroundColor:CL.gold},{label:"Bounce",data:b10.map(b=>b.bounce),backgroundColor:CL.red}]},options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:"bottom",labels:{font:{size:10},padding:6}}},scales:{x:{stacked:true,grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099"}},y:{stacked:true,grid:{display:false},ticks:{font:{size:10},color:"#4C4C4C"}}}}});
 
-  // Sort listeners
   document.querySelectorAll("#content-table th[data-sort]").forEach(th=>{
     th.addEventListener("click",()=>{
       const f=th.dataset.sort;
@@ -476,7 +536,6 @@ function render(){
   function mLabel(k){return metricLabels[k]||k;}
   var trafficColors=["#0960BB","#FFBF3F","#2E7D32","#7C3AED","#E53935","#D97706","#0891B2","#8B5CF6"];
   var defaultSelected=["Impression","Daily Visit"];
-  // Checkbox toggles
   histMetrics.forEach(function(m,i){
     var checked=defaultSelected.indexOf(m)>-1;
     hhtml+='<label style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:500;cursor:pointer;border:1px solid '+(checked?trafficColors[i]:"#E8ECF0")+';background:'+(checked?trafficColors[i]+"14":"#fff")+';color:'+(checked?trafficColors[i]:"#8A9099")+'" id="hist-label-'+i+'">';
@@ -485,7 +544,6 @@ function render(){
     hhtml+=mLabel(m)+'</label>';
   });
   hhtml+='<span id="hist-select-hint" style="font-size:10px;color:#8A9099"></span>';
-  // Top content dropdown (populated after fetch)
   hhtml+='<select id="hist-content-add" style="padding:4px 8px;border-radius:6px;border:1px solid #E8ECF0;font-size:11px;font-family:inherit;color:#8A9099"><option value="">+ Content line...</option></select>';
   hhtml+='</div></div>';
   hhtml+='<div id="hist-content-tags" style="display:flex;gap:4px;flex-wrap:wrap;margin:-4px 0 8px"></div>';
@@ -494,27 +552,21 @@ function render(){
   hhtml+='<div id="hist-status" style="font-size:11px;color:#8A9099;margin-bottom:8px"></div>';
   hhtml+='<div class="chart-wrap" style="height:280px"><canvas id="c-hist-traffic"></canvas></div>';
   hhtml+='</div></div>';
-
   hhtml+='<div class="charts"><div class="chart-card" style="flex:1 1 100%">';
   hhtml+='<div class="chart-title">CommandBar Pip Interactions</div>';
   hhtml+='<div class="chart-wrap" style="height:220px"><canvas id="c-hist-widget"></canvas></div>';
   hhtml+='</div></div>';
-
   hhtml+='<div class="charts"><div class="chart-card" style="flex:1 1 100%">';
   hhtml+='<div class="chart-title">CommandBar Rail Interactions</div>';
   hhtml+='<div class="chart-wrap" style="height:220px"><canvas id="c-hist-detail"></canvas></div>';
   hhtml+='</div></div>';
-
   hhtml+='<div id="hist-insights"></div>';
-
   document.getElementById("tab-historical").innerHTML=hhtml;
 
-  // Checkbox toggle handlers for traffic metrics
   document.querySelectorAll(".hist-metric-cb").forEach(function(cb){
     cb.addEventListener("change",function(){
       var checked=document.querySelectorAll(".hist-metric-cb:checked");
       if(checked.length>5){this.checked=false;return;}
-      // Update label styling
       var idx=this.dataset.idx;
       var label=document.getElementById("hist-label-"+idx);
       if(label){
@@ -528,7 +580,6 @@ function render(){
       if(histData&&checked.length>=2)renderHistoricalCharts();
     });
   });
-  // Content dropdown add handler
   var contentAdd=document.getElementById("hist-content-add");
   if(contentAdd)contentAdd.addEventListener("change",function(){
     if(!this.value)return;
@@ -536,20 +587,26 @@ function render(){
     this.value="";
     renderContentTags();
   });
-  // If data already loaded, render charts
   if(histData)setTimeout(renderHistoricalCharts,100);
 
   // ── LEADERBOARD TAB ──
   var lhtml='<div id="leaderboard-inner">';
-  if(!histData){
-    lhtml+='<div class="chart-card" style="text-align:center;padding:40px;color:#8A9099;font-size:12px">Loading daily data to build the leaderboard...</div>';
-  }
+  if(!histData){lhtml+='<div class="chart-card" style="text-align:center;padding:40px;color:#8A9099;font-size:12px">Loading daily data to build the leaderboard...</div>';}
   lhtml+='</div>';
   document.getElementById("tab-leaderboard").innerHTML=lhtml;
   if(histData)renderLeaderboard();
 
   // ── COMPANIES TAB ──
-  var chtml='<div class="charts"><div class="chart-card" style="flex:1 1 100%">';
+  renderCompaniesTab();
+
+  // ── MAP TAB ──
+  renderMapTab();
+}
+
+// ── COMPANIES TAB RENDER ──
+function renderCompaniesTab(){
+  var chtml = feedSelectorHTML("co-feed-selector", "companies");
+  chtml+='<div class="charts"><div class="chart-card" style="flex:1 1 100%">';
   chtml+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">';
   chtml+='<div class="chart-title" style="margin-bottom:0">Visitor Companies</div>';
   chtml+='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">';
@@ -569,9 +626,12 @@ function render(){
   chtml+='<div id="co-insights"></div>';
   document.getElementById("tab-companies").innerHTML=chtml;
   if(companiesData)renderCompaniesTable();
+}
 
-  // ── MAP TAB ──
-  var mhtml='<div class="charts"><div class="chart-card" style="flex:1 1 100%">';
+// ── MAP TAB RENDER ──
+function renderMapTab(){
+  var mhtml = feedSelectorHTML("map-feed-selector", "map");
+  mhtml+='<div class="charts"><div class="chart-card" style="flex:1 1 100%">';
   mhtml+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">';
   mhtml+='<div id="map-breadcrumb"><span class="chart-title" style="margin-bottom:0">Bank Visitor Map</span></div>';
   mhtml+='<div style="display:flex;gap:6px;align-items:center">';
@@ -584,13 +644,19 @@ function render(){
   mhtml+='<div id="map-detail" style="margin-top:8px"></div>';
   document.getElementById("tab-map").innerHTML=mhtml;
   if(companiesData&&mapStateData)renderUSMap();
-
 }
 
 // ── COMPANIES ──
-var LF_URL="https://leadfeeder-proxy.jameswspence.workers.dev";
 var companiesData=null;
 var INTERNAL_NAMES=["SouthState Bank","SouthState Securities","First Federal","SouthState Correspondent"];
+
+// Build the fetch URL — uses feed-scoped endpoint when a feed is selected
+function lfLeadsUrl(page, startDate, endDate){
+  var base = currentLfFeed
+    ? LF_URL+"/feeds/"+currentLfFeed+"/leads"
+    : LF_URL+"/leads";
+  return base+"?start_date="+startDate+"&end_date="+endDate+"&page="+page+"&page_size=100";
+}
 
 async function fetchCompanies(){
   var btn=document.getElementById("co-fetch-btn");
@@ -601,17 +667,16 @@ async function fetchCompanies(){
   var startDate=fromEl&&fromEl.value?fromEl.value:defaultDateStr(-6);
   var endDate=toEl&&toEl.value?toEl.value:defaultDateStr(0);
 
-  var origText=btn.innerHTML;
-  btn.innerHTML="Loading...";btn.style.opacity=".6";btn.style.pointerEvents="none";
-  status.textContent="Fetching companies...";
+  if(btn){btn.innerHTML="Loading...";btn.style.opacity=".6";btn.style.pointerEvents="none";}
+  if(status)status.textContent="Fetching companies"+(currentLfFeed?" for feed: "+lfFeedName(currentLfFeed):"")+"...";
 
   try{
     var allLeads=[];
     var pg=1;
     var more=true;
     while(more&&pg<=5){
-      status.textContent="Fetching page "+pg+"...";
-      var resp=await fetch(LF_URL+"/leads?start_date="+startDate+"&end_date="+endDate+"&page="+pg+"&page_size=100");
+      if(status)status.textContent="Fetching page "+pg+"...";
+      var resp=await fetch(lfLeadsUrl(pg, startDate, endDate));
       var result=await resp.json();
       if(result.error)throw new Error(result.error);
       allLeads=allLeads.concat(result.data||[]);
@@ -619,13 +684,21 @@ async function fetchCompanies(){
       pg++;
     }
     companiesData=allLeads;
-    status.innerHTML='<span style="color:#2E7D32">'+allLeads.length+' companies loaded.</span>';
+    var feedLabel=currentLfFeed?" · "+lfFeedName(currentLfFeed):"";
+    if(status)status.innerHTML='<span style="color:#2E7D32">'+allLeads.length+' companies loaded'+feedLabel+'.</span>';
     renderCompaniesTable();
+    // Rebuild map state data if map was also loaded
+    if(mapStateData!==null){buildMapStateData();}
   }catch(err){
-    status.innerHTML='<span style="color:#E53935">Failed: '+err.message+'</span>';
+    if(status)status.innerHTML='<span style="color:#E53935">Failed: '+err.message+'</span>';
   }
 
-  btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";
+  if(btn){btn.innerHTML="Load Companies";btn.style.opacity="1";btn.style.pointerEvents="auto";}
+}
+
+function lfFeedName(id){
+  var f=lfFeeds.find(function(f){return f.id===id;});
+  return f?f.name:id;
 }
 
 function defaultDateStr(offset){
@@ -673,14 +746,9 @@ function renderCompaniesTable(){
 
   var html='<table style="width:100%;border-collapse:collapse;font-size:12px">';
   html+='<thead><tr style="border-bottom:2px solid #E8ECF0">';
-  html+='<th style="text-align:left;padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase;width:40px"></th>';
-  html+='<th style="text-align:left;padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase">Company</th>';
-  html+='<th style="text-align:center;padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase">Industry</th>';
-  html+='<th style="text-align:center;padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase">Size</th>';
-  html+='<th style="text-align:center;padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase">Quality</th>';
-  html+='<th style="text-align:center;padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase">Last Visit</th>';
-  html+='<th style="text-align:center;padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase">Status</th>';
-  html+='<th style="text-align:center;padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase;width:50px">Pages</th>';
+  ['','Company','Industry','Size','Quality','Last Visit','Status','Pages'].forEach(function(h,i){
+    html+='<th style="text-align:'+(i<=1?'left':'center')+';padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase'+(i===0?';width:40px':i===7?';width:50px':'')+'">'+(h)+'</th>';
+  });
   html+='</tr></thead><tbody>';
 
   filtered.forEach(function(c,i){
@@ -689,53 +757,45 @@ function renderCompaniesTable(){
     var qBg=c.quality>=8?"#2E7D3214":c.quality>=5?"#0960BB14":c.quality>=3?"#FFBF3F14":"#F5F7FA";
     var empLabel=c.employee_count?c.employee_count>=10001?"10k+":c.employee_count>=1000?Math.round(c.employee_count/1000)+"k":String(c.employee_count):"\u2013";
     var indColor=((c.industry||"").toLowerCase().indexOf("bank")>-1||(c.industry||"").toLowerCase().indexOf("financial")>-1)?"#0960BB":"#8A9099";
-    var rowId="co-row-"+i;
     var pagesId="co-pages-"+i;
 
     html+='<tr style="border-bottom:1px solid #F0F2F5;'+(i%2===1?"background:#FAFBFC;":"")+'">';
-    // Logo
     html+='<td style="padding:8px;text-align:center">';
     if(c.logo_url)html+='<img src="'+c.logo_url+'" style="width:28px;height:28px;border-radius:6px;object-fit:contain;background:#F5F7FA" onerror="this.style.display=\'none\'">';
     else html+='<div style="width:28px;height:28px;border-radius:6px;background:#E8ECF0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#8A9099;margin:0 auto">'+c.name.charAt(0)+'</div>';
     html+='</td>';
-    // Name + website
     html+='<td style="padding:8px"><div style="font-weight:600;color:#1A1A2E">'+c.name+'</div>';
     if(c.website_url)html+='<div style="font-size:10px;color:#8A9099;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px"><a href="'+c.website_url+'" target="_blank" style="color:#8A9099;text-decoration:none">'+c.website_url.replace(/^https?:\/\//,"").replace(/\/+$/,"")+'</a></div>';
     if(c.state)html+='<span style="font-size:9px;color:#8A9099">'+c.state+(c.city?", "+c.city:"")+'</span>';
     if(isNew)html+=' <span style="display:inline-block;margin-top:2px;font-size:9px;font-weight:600;padding:1px 6px;border-radius:6px;background:#2E7D3214;color:#2E7D32">NEW</span>';
     html+='</td>';
-    // Industry
     html+='<td style="text-align:center;padding:8px"><span style="font-size:10px;font-weight:500;color:'+indColor+'">'+(c.industry||"\u2013")+'</span></td>';
-    // Size
     html+='<td style="text-align:center;padding:8px;font-size:11px;color:#1A1A2E">'+empLabel+'</td>';
-    // Quality
     html+='<td style="text-align:center;padding:8px"><span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;font-size:12px;font-weight:700;background:'+qBg+';color:'+qColor+'">'+c.quality+'</span></td>';
-    // Last visit
     html+='<td style="text-align:center;padding:8px;font-size:11px;color:#1A1A2E">'+(c.last_visit_date||"\u2013")+'</td>';
-    // Status
     var stColor=c.status==="handled"?"#0960BB":c.status==="new"?"#2E7D32":"#8A9099";
     var stBg=c.status==="handled"?"#0960BB14":c.status==="new"?"#2E7D3214":"#F5F7FA";
     html+='<td style="text-align:center;padding:8px"><span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:8px;background:'+stBg+';color:'+stColor+'">'+(c.status||"\u2013")+'</span></td>';
-    // Pages expand button
     html+='<td style="text-align:center;padding:8px"><button onclick="toggleCompanyPages(\''+c.id+'\',\''+pagesId+'\')" style="padding:3px 8px;border-radius:6px;border:1px solid #E8ECF0;background:#fff;font-size:10px;cursor:pointer;color:#0960BB;font-weight:600">\u25BC</button></td>';
     html+='</tr>';
-    // Expandable pages row (hidden by default)
     html+='<tr id="'+pagesId+'" style="display:none"><td colspan="8" style="padding:0 8px 12px 48px;background:#F8F9FC"><div id="'+pagesId+'-content" style="padding:8px 0;font-size:11px;color:#8A9099">Loading pages...</div></td></tr>';
   });
 
   html+='</tbody></table>';
   el.innerHTML=html;
 
-  // Insights
   var bankCount=filtered.filter(function(c){var ind=(c.industry||"").toLowerCase();return ind.indexOf("bank")>-1||ind.indexOf("financial")>-1||ind.indexOf("credit")>-1}).length;
-  var newCount=filtered.filter(function(c){return startDate&&c.first_visit_date>=startDate}).length;
+  var fromEl=document.getElementById("date-from");
+  var startDate2=fromEl&&fromEl.value?fromEl.value:"";
+  var newCount=filtered.filter(function(c){return startDate2&&c.first_visit_date>=startDate2}).length;
   var highQuality=filtered.filter(function(c){return c.quality>=8}).length;
+  var feedInfo=currentLfFeed?' (feed: <strong>'+lfFeedName(currentLfFeed)+'</strong>)':"";
 
   var ihtml='<div class="insights"><h3>Company Insights</h3><div>';
-  ihtml+='<div><strong>Total:</strong> '+filtered.length+' companies identified ('+companiesData.length+' total before filters).</div>';
+  ihtml+='<div><strong>Total:</strong> '+filtered.length+' companies identified ('+companiesData.length+' total before filters)'+feedInfo+'.</div>';
   ihtml+='<div><strong>Banking & Financial:</strong> '+bankCount+' financial institutions visiting your site.</div>';
   ihtml+='<div><strong>New This Period:</strong> '+newCount+' companies visiting for the first time.</div>';
-  if(highQuality>0)ihtml+='<div><strong>High Quality:</strong> '+highQuality+' companies scored 8+ by Leadfeeder \u2014 strong engagement signals.</div>';
+  if(highQuality>0)ihtml+='<div><strong>High Quality:</strong> '+highQuality+' companies scored 8+ by Leadfeeder — strong engagement signals.</div>';
   ihtml+='</div></div>';
   document.getElementById("co-insights").innerHTML=ihtml;
 }
@@ -745,68 +805,40 @@ var companyPagesCache={};
 async function toggleCompanyPages(leadId,rowId){
   var row=document.getElementById(rowId);
   if(!row)return;
-
-  // Toggle visibility
-  if(row.style.display!=="none"){
-    row.style.display="none";
-    return;
-  }
+  if(row.style.display!=="none"){row.style.display="none";return;}
   row.style.display="";
-
   var contentEl=document.getElementById(rowId+"-content");
   if(!contentEl)return;
-
-  // Check cache
-  if(companyPagesCache[leadId]){
-    renderCompanyPages(contentEl,companyPagesCache[leadId]);
-    return;
-  }
-
+  if(companyPagesCache[leadId]){renderCompanyPages(contentEl,companyPagesCache[leadId]);return;}
   contentEl.innerHTML='<span style="color:#8A9099">Loading visited pages...</span>';
-
   try{
     var fromEl=document.getElementById("date-from");
     var toEl=document.getElementById("date-to");
     var startDate=fromEl&&fromEl.value?fromEl.value:defaultDateStr(-6);
     var endDate=toEl&&toEl.value?toEl.value:defaultDateStr(0);
-
     var resp=await fetch(LF_URL+"/leads/"+leadId+"/visits?start_date="+startDate+"&end_date="+endDate);
     var result=await resp.json();
-
-    if(result.error){
-      contentEl.innerHTML='<span style="color:#E53935">Error: '+result.error+'</span>';
-      return;
-    }
-
+    if(result.error){contentEl.innerHTML='<span style="color:#E53935">Error: '+result.error+'</span>';return;}
     companyPagesCache[leadId]=result.data||[];
     renderCompanyPages(contentEl,result.data||[]);
-  }catch(err){
-    contentEl.innerHTML='<span style="color:#E53935">Failed to load: '+err.message+'</span>';
-  }
+  }catch(err){contentEl.innerHTML='<span style="color:#E53935">Failed to load: '+err.message+'</span>';}
 }
 
 function renderCompanyPages(el,visits){
-  if(!visits||visits.length===0){
-    el.innerHTML='<span style="color:#8A9099">No visit details available for this period.</span>';
-    return;
-  }
-
+  if(!visits||visits.length===0){el.innerHTML='<span style="color:#8A9099">No visit details available for this period.</span>';return;}
   var html='<div style="margin-bottom:4px;font-size:10px;font-weight:600;color:#002D72;text-transform:uppercase;letter-spacing:.5px">'+visits.length+' Visit'+(visits.length>1?"s":"")+'</div>';
-
   visits.forEach(function(v,vi){
     var route=v.visit_route||[];
     var timeStr=v.date+(v.hour!=null?" at "+String(v.hour).padStart(2,"0")+":00":"");
-    var lengthStr=v.visit_length>0?Math.floor(v.visit_length/60)+"m "+( v.visit_length%60)+"s":"< 1s";
+    var lengthStr=v.visit_length>0?Math.floor(v.visit_length/60)+"m "+(v.visit_length%60)+"s":"< 1s";
     var srcStr=(v.source||"direct")+(v.medium?" / "+v.medium:"");
-
     html+='<div style="padding:8px 0;'+(vi<visits.length-1?"border-bottom:1px solid #E8ECF0;":"")+'">';
     html+='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px">';
     html+='<span style="font-size:11px;font-weight:600;color:#1A1A2E">'+timeStr+'</span>';
-    html+='<span style="font-size:10px;color:#8A9099">'+lengthStr+' \u00b7 '+route.length+' page'+(route.length!==1?"s":"")+'</span>';
+    html+='<span style="font-size:10px;color:#8A9099">'+lengthStr+' · '+route.length+' page'+(route.length!==1?"s":"")+'</span>';
     html+='<span style="font-size:10px;color:#8A9099">via '+srcStr+'</span>';
-    if(v.device_type)html+='<span style="font-size:10px;color:#8A9099">\u00b7 '+v.device_type+'</span>';
+    if(v.device_type)html+='<span style="font-size:10px;color:#8A9099">· '+v.device_type+'</span>';
     html+='</div>';
-
     if(route.length>0){
       html+='<div style="margin-left:8px;border-left:2px solid #E8ECF0;padding-left:10px">';
       route.forEach(function(p,pi){
@@ -821,20 +853,16 @@ function renderCompanyPages(el,visits){
     }
     html+='</div>';
   });
-
   el.innerHTML=html;
 }
 
 // ── MAP ──
 var mapStateData=null;
-var mapCurrentView="us"; // "us", "state", "city"
+var mapCurrentView="us";
 var mapCurrentState="";
 var mapCurrentCity="";
 
-var US_STATES={
-  "AL":"Alabama","AK":"Alaska","AZ":"Arizona","AR":"Arkansas","CA":"California","CO":"Colorado","CT":"Connecticut","DE":"Delaware","FL":"Florida","GA":"Georgia","HI":"Hawaii","ID":"Idaho","IL":"Illinois","IN":"Indiana","IA":"Iowa","KS":"Kansas","KY":"Kentucky","LA":"Louisiana","ME":"Maine","MD":"Maryland","MA":"Massachusetts","MI":"Michigan","MN":"Minnesota","MS":"Mississippi","MO":"Missouri","MT":"Montana","NE":"Nebraska","NV":"Nevada","NH":"New Hampshire","NJ":"New Jersey","NM":"New Mexico","NY":"New York","NC":"North Carolina","ND":"North Dakota","OH":"Ohio","OK":"Oklahoma","OR":"Oregon","PA":"Pennsylvania","RI":"Rhode Island","SC":"South Carolina","SD":"South Dakota","TN":"Tennessee","TX":"Texas","UT":"Utah","VT":"Vermont","VA":"Virginia","WA":"Washington","WV":"West Virginia","WI":"Wisconsin","WY":"Wyoming","DC":"District of Columbia"
-};
-
+var US_STATES={"AL":"Alabama","AK":"Alaska","AZ":"Arizona","AR":"Arkansas","CA":"California","CO":"Colorado","CT":"Connecticut","DE":"Delaware","FL":"Florida","GA":"Georgia","HI":"Hawaii","ID":"Idaho","IL":"Illinois","IN":"Indiana","IA":"Iowa","KS":"Kansas","KY":"Kentucky","LA":"Louisiana","ME":"Maine","MD":"Maryland","MA":"Massachusetts","MI":"Michigan","MN":"Minnesota","MS":"Mississippi","MO":"Missouri","MT":"Montana","NE":"Nebraska","NV":"Nevada","NH":"New Hampshire","NJ":"New Jersey","NM":"New Mexico","NY":"New York","NC":"North Carolina","ND":"North Dakota","OH":"Ohio","OK":"Oklahoma","OR":"Oregon","PA":"Pennsylvania","RI":"Rhode Island","SC":"South Carolina","SD":"South Dakota","TN":"Tennessee","TX":"Texas","UT":"Utah","VT":"Vermont","VA":"Virginia","WA":"Washington","WV":"West Virginia","WI":"Wisconsin","WY":"Wyoming","DC":"District of Columbia"};
 var STATE_NAMES={};
 Object.keys(US_STATES).forEach(function(k){STATE_NAMES[US_STATES[k].toLowerCase()]=k;STATE_NAMES[k.toLowerCase()]=k;});
 
@@ -843,7 +871,6 @@ function resolveStateCode(c){
   if(c.state_code&&c.state_code.length===2)return c.state_code.toUpperCase();
   var s=(c.state||"").toLowerCase().trim();
   if(STATE_NAMES[s])return STATE_NAMES[s];
-  // Try matching partial
   var keys=Object.keys(US_STATES);
   for(var i=0;i<keys.length;i++){if(US_STATES[keys[i]].toLowerCase().indexOf(s)>-1)return keys[i];}
   return"";
@@ -851,10 +878,7 @@ function resolveStateCode(c){
 
 async function fetchMapData(){
   var status=document.getElementById("map-status");
-  if(companiesData){
-    buildMapStateData();
-    return;
-  }
+  if(companiesData){buildMapStateData();return;}
   if(status)status.textContent="Loading companies for map...";
   await fetchCompanies();
   buildMapStateData();
@@ -863,14 +887,11 @@ async function fetchMapData(){
 function buildMapStateData(){
   var status=document.getElementById("map-status");
   if(!companiesData){if(status)status.innerHTML='<span style="color:#E53935">No company data loaded.</span>';return;}
-
   mapStateData={};
   var unmapped=0;
   companiesData.forEach(function(c){
-    // Only banking/financial
     var ind=(c.industry||"").toLowerCase();
     if(!(ind.indexOf("bank")>-1||ind.indexOf("financial")>-1||ind.indexOf("credit")>-1||ind.indexOf("investment")>-1))return;
-    // Skip internal
     if(INTERNAL_NAMES.some(function(n){return c.name.indexOf(n)>-1}))return;
     var sc=resolveStateCode(c);
     if(!sc||!US_STATES[sc]){unmapped++;return;}
@@ -880,11 +901,10 @@ function buildMapStateData(){
     if(!mapStateData[sc].cities[city])mapStateData[sc].cities[city]=[];
     mapStateData[sc].cities[city].push(c);
   });
-
   var stateCount=Object.keys(mapStateData).length;
   var totalCos=Object.keys(mapStateData).reduce(function(s,k){return s+mapStateData[k].companies.length},0);
-  if(status)status.innerHTML='<span style="color:#2E7D32">'+totalCos+' banking companies across '+stateCount+' states.'+(unmapped>0?' ('+unmapped+' without location data)':'')+'</span>';
-
+  var feedLabel=currentLfFeed?" · "+lfFeedName(currentLfFeed):"";
+  if(status)status.innerHTML='<span style="color:#2E7D32">'+totalCos+' banking companies across '+stateCount+' states'+feedLabel+'.'+(unmapped>0?' ('+unmapped+' without location data)':'')+'</span>';
   mapCurrentView="us";
   renderUSMap();
 }
@@ -894,9 +914,7 @@ function renderUSMap(){
   var backBtn=document.getElementById("map-back-btn");
   var breadcrumb=document.getElementById("map-breadcrumb");
   if(!container||!mapStateData)return;
-
   if(backBtn)backBtn.style.display=mapCurrentView==="us"?"none":"";
-
   if(mapCurrentView==="us"){
     if(breadcrumb)breadcrumb.innerHTML='<span class="chart-title" style="margin-bottom:0">Bank Visitor Map \u2014 United States</span>';
     renderStateList(container);
@@ -911,15 +929,10 @@ function renderUSMap(){
 
 function renderStateList(container){
   var states=Object.keys(mapStateData).sort(function(a,b){return mapStateData[b].companies.length-mapStateData[a].companies.length});
-  var maxCos=states.length>0?mapStateData[states[0]].companies.length:1;
-
-  // Build the SVG map approach: fetch from CDN
   var html='<div style="position:relative">';
   html+='<div id="us-map-svg" style="width:100%;max-width:800px;margin:0 auto"></div>';
   html+='<div id="map-tooltip" style="display:none;position:absolute;padding:8px 12px;background:#002D72;color:#fff;border-radius:6px;font-size:12px;font-weight:600;pointer-events:none;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,.2)"></div>';
   html+='</div>';
-
-  // Legend
   html+='<div style="display:flex;justify-content:center;gap:16px;margin-top:12px;flex-wrap:wrap">';
   html+='<span style="font-size:10px;color:#8A9099;display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#E8ECF0"></span> No visitors</span>';
   html+='<span style="font-size:10px;color:#8A9099;display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#A3C4E9"></span> 1 company</span>';
@@ -927,8 +940,6 @@ function renderStateList(container){
   html+='<span style="font-size:10px;color:#8A9099;display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#0960BB"></span> 4-6</span>';
   html+='<span style="font-size:10px;color:#8A9099;display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#002D72"></span> 7+</span>';
   html+='</div>';
-
-  // State cards below map
   html+='<div style="margin-top:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px">';
   states.forEach(function(sc){
     var sd=mapStateData[sc];
@@ -939,13 +950,10 @@ function renderStateList(container){
     html+='</div>';
   });
   html+='</div>';
-
-  if(states.length===0)html='<div style="text-align:center;padding:40px;color:#8A9099;font-size:12px">No banking companies with location data found. Deploy Leadfeeder Worker v1.1 to capture location.</div>';
-
+  if(states.length===0)html='<div style="text-align:center;padding:40px;color:#8A9099;font-size:12px">No banking companies with location data found.</div>';
   container.innerHTML=html;
   document.getElementById("map-detail").innerHTML="";
 
-  // Fetch SVG map from simplemaps (MIT license, free commercial use)
   var mapDiv=document.getElementById("us-map-svg");
   if(mapDiv){
     fetch("https://sscdwidgets.github.io/cb-dashboard/us.svg")
@@ -953,14 +961,7 @@ function renderStateList(container){
     .then(function(svg){
       mapDiv.innerHTML=svg;
       var svgEl=mapDiv.querySelector("svg");
-      if(svgEl){
-        svgEl.setAttribute("width","100%");
-        svgEl.removeAttribute("height");
-        svgEl.style.maxHeight="450px";
-        svgEl.style.display="block";
-        svgEl.style.margin="0 auto";
-      }
-      // Color and wire up each state path
+      if(svgEl){svgEl.setAttribute("width","100%");svgEl.removeAttribute("height");svgEl.style.maxHeight="450px";svgEl.style.display="block";svgEl.style.margin="0 auto";}
       var paths=mapDiv.querySelectorAll("path[id]");
       paths.forEach(function(p){
         var stId=(p.getAttribute("data-id")||p.getAttribute("id")||"").toUpperCase();
@@ -968,95 +969,51 @@ function renderStateList(container){
         if(sd){
           var n=sd.companies.length;
           var fill=n>=7?"#002D72":n>=4?"#0960BB":n>=2?"#4A90D9":"#A3C4E9";
-          p.style.fill=fill;
-          p.style.cursor="pointer";
-          p.style.transition="fill .2s ease, stroke .2s ease";
-          p.style.stroke="#fff";p.style.strokeWidth="1";
+          p.style.fill=fill;p.style.cursor="pointer";p.style.transition="fill .2s ease, stroke .2s ease";p.style.stroke="#fff";p.style.strokeWidth="1";
           p.addEventListener("click",function(){mapDrillState(stId);});
           p.addEventListener("mouseenter",function(e){
             p.style.fill="#FFBF3F";
             var tip=document.getElementById("map-tooltip");
-            if(tip){
-              tip.style.display="block";
-              tip.innerHTML=stId+" \u2014 "+sd.name+"<br>"+n+" compan"+(n===1?"y":"ies");
-              var rect=mapDiv.getBoundingClientRect();
-              tip.style.left=(e.clientX-rect.left+10)+"px";
-              tip.style.top=(e.clientY-rect.top-40)+"px";
-            }
+            if(tip){tip.style.display="block";tip.innerHTML=stId+" \u2014 "+sd.name+"<br>"+n+" compan"+(n===1?"y":"ies");var rect=mapDiv.getBoundingClientRect();tip.style.left=(e.clientX-rect.left+10)+"px";tip.style.top=(e.clientY-rect.top-40)+"px";}
           });
-          p.addEventListener("mousemove",function(e){
-            var tip=document.getElementById("map-tooltip");
-            if(tip){
-              var rect=mapDiv.getBoundingClientRect();
-              tip.style.left=(e.clientX-rect.left+10)+"px";
-              tip.style.top=(e.clientY-rect.top-40)+"px";
-            }
-          });
-          p.addEventListener("mouseleave",function(){
-            var n2=sd.companies.length;
-            p.style.fill=n2>=7?"#002D72":n2>=4?"#0960BB":n2>=2?"#4A90D9":"#A3C4E9";
-            var tip=document.getElementById("map-tooltip");
-            if(tip)tip.style.display="none";
-          });
-        }else{
-          p.style.fill="#E8ECF0";
-          p.style.stroke="#fff";p.style.strokeWidth="1";
-        }
+          p.addEventListener("mousemove",function(e){var tip=document.getElementById("map-tooltip");if(tip){var rect=mapDiv.getBoundingClientRect();tip.style.left=(e.clientX-rect.left+10)+"px";tip.style.top=(e.clientY-rect.top-40)+"px";}});
+          p.addEventListener("mouseleave",function(){var n2=sd.companies.length;p.style.fill=n2>=7?"#002D72":n2>=4?"#0960BB":n2>=2?"#4A90D9":"#A3C4E9";var tip=document.getElementById("map-tooltip");if(tip)tip.style.display="none";});
+        }else{p.style.fill="#E8ECF0";p.style.stroke="#fff";p.style.strokeWidth="1";}
       });
     })
-    .catch(function(err){
-      mapDiv.innerHTML='<div style="text-align:center;padding:20px;color:#8A9099;font-size:11px">Map SVG could not be loaded. State cards below still work.</div>';
-    });
+    .catch(function(){mapDiv.innerHTML='<div style="text-align:center;padding:20px;color:#8A9099;font-size:11px">Map SVG could not be loaded. State cards below still work.</div>';});
   }
 }
 
-function mapDrillState(sc){
-  mapCurrentState=sc;
-  mapCurrentView="state";
-  renderUSMap();
-}
+function mapDrillState(sc){mapCurrentState=sc;mapCurrentView="state";renderUSMap();}
 
 function renderCityList(container,sc){
   var sd=mapStateData[sc];
   if(!sd){container.innerHTML="No data.";return;}
-
   var cities=Object.keys(sd.cities).sort(function(a,b){return sd.cities[b].length-sd.cities[a].length});
   var maxCos=cities.length>0?sd.cities[cities[0]].length:1;
-
   var html='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">';
   cities.forEach(function(city){
     var cos=sd.cities[city];
     var pct=Math.round((cos.length/maxCos)*100);
     html+='<div onclick="mapDrillCity(\''+city.replace(/'/g,"\\'")+'\')" style="cursor:pointer;padding:12px;border-radius:10px;border:1px solid #E8ECF0;background:#fff;transition:all .15s" onmouseover="this.style.borderColor=\'#0960BB\';this.style.boxShadow=\'0 2px 8px rgba(9,96,187,.12)\'" onmouseout="this.style.borderColor=\'#E8ECF0\';this.style.boxShadow=\'none\'">';
-    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
-    html+='<span style="font-size:13px;font-weight:600;color:#1A1A2E">'+city+'</span>';
-    html+='<span style="font-size:18px;font-weight:800;color:#0960BB">'+cos.length+'</span>';
-    html+='</div>';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-size:13px;font-weight:600;color:#1A1A2E">'+city+'</span><span style="font-size:18px;font-weight:800;color:#0960BB">'+cos.length+'</span></div>';
     html+='<div style="height:4px;background:#F0F2F5;border-radius:2px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:#0960BB;border-radius:2px"></div></div>';
-    // Show first 3 company names
     html+='<div style="margin-top:6px">';
-    cos.slice(0,3).forEach(function(c){
-      html+='<div style="font-size:10px;color:#8A9099;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\u2022 '+c.name+'</div>';
-    });
+    cos.slice(0,3).forEach(function(c){html+='<div style="font-size:10px;color:#8A9099;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">• '+c.name+'</div>';});
     if(cos.length>3)html+='<div style="font-size:10px;color:#8A9099">+'+(cos.length-3)+' more</div>';
-    html+='</div>';
-    html+='</div>';
+    html+='</div></div>';
   });
   html+='</div>';
   container.innerHTML=html;
   document.getElementById("map-detail").innerHTML="";
 }
 
-function mapDrillCity(city){
-  mapCurrentCity=city;
-  mapCurrentView="city";
-  renderUSMap();
-}
+function mapDrillCity(city){mapCurrentCity=city;mapCurrentView="city";renderUSMap();}
 
 function renderCityCompanies(container,sc,city){
   var sd=mapStateData[sc];
   if(!sd||!sd.cities[city]){container.innerHTML="No data.";return;}
-
   var cos=sd.cities[city];
   var html='<div style="display:flex;flex-direction:column;gap:8px">';
   cos.forEach(function(c){
@@ -1066,16 +1023,15 @@ function renderCityCompanies(container,sc,city){
     html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">';
     if(c.logo_url)html+='<img src="'+c.logo_url+'" style="width:32px;height:32px;border-radius:6px;object-fit:contain;background:#F5F7FA" onerror="this.style.display=\'none\'">';
     html+='<div style="flex:1"><div style="font-size:14px;font-weight:700;color:#002D72">'+c.name+'</div>';
-    html+='<div style="font-size:10px;color:#8A9099">'+(c.industry||"")+(c.employee_count?" \u00b7 "+empLabel+" employees":"")+'</div></div>';
+    html+='<div style="font-size:10px;color:#8A9099">'+(c.industry||"")+(c.employee_count?" · "+empLabel+" employees":"")+'</div></div>';
     html+='<span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;font-size:14px;font-weight:700;background:'+qColor+'14;color:'+qColor+'">'+c.quality+'</span>';
     html+='</div>';
     html+='<div style="display:flex;gap:8px;flex-wrap:wrap;font-size:10px;color:#8A9099">';
     html+='<span>Last visit: '+(c.last_visit_date||"\u2013")+'</span>';
     if(c.website_url)html+='<a href="'+c.website_url+'" target="_blank" style="color:#0960BB;text-decoration:none">'+c.website_url.replace(/^https?:\/\//,"").replace(/\/+$/,"")+'</a>';
     html+='</div>';
-    // Pages expand
     var pagesId="map-pages-"+c.id.replace(/[^a-zA-Z0-9]/g,"").slice(0,20);
-    html+='<div style="margin-top:8px"><button onclick="toggleCompanyPages(\''+c.id+'\',\''+pagesId+'\')" style="padding:3px 10px;border-radius:6px;border:1px solid #E8ECF0;background:#fff;font-size:10px;cursor:pointer;color:#0960BB;font-weight:600">\u25BC View Pages</button></div>';
+    html+='<div style="margin-top:8px"><button onclick="toggleCompanyPages(\''+c.id+'\',\''+pagesId+'\')" style="padding:3px 10px;border-radius:6px;border:1px solid #E8ECF0;background:#fff;font-size:10px;cursor:pointer;color:#0960BB;font-weight:600">▼ View Pages</button></div>';
     html+='<div id="'+pagesId+'" style="display:none"><div id="'+pagesId+'-content" style="padding:8px 0;font-size:11px;color:#8A9099">Loading...</div></div>';
     html+='</div>';
   });
@@ -1145,32 +1101,17 @@ async function fetchHistorical(){
   var toEl=document.getElementById("date-to");
   var btn=document.getElementById("hist-fetch-btn");
   var status=document.getElementById("hist-status");
-
-  if(!fromEl.value||!toEl.value){
-    status.innerHTML='<span style="color:#E53935">Select date range in the header first.</span>';
-    return;
-  }
-
+  if(!fromEl.value||!toEl.value){status.innerHTML='<span style="color:#E53935">Select date range in the header first.</span>';return;}
   var from=new Date(fromEl.value+"T12:00:00");
   var to=new Date(toEl.value+"T12:00:00");
   if(from>to){status.innerHTML='<span style="color:#E53935">Invalid date range.</span>';return;}
-
   function fmtD(dt){var y=dt.getFullYear(),m=String(dt.getMonth()+1).padStart(2,"0"),d=String(dt.getDate()).padStart(2,"0");return y+"-"+m+"-"+d;}
-
-  var days=[];
-  var d=new Date(from);
-  while(d<=to){days.push(fmtD(d));d.setDate(d.getDate()+1);}
-
-  if(days.length>60){
-    status.innerHTML='<span style="color:#E53935">Max 60 days for daily data. Narrow the date range.</span>';
-    return;
-  }
-
+  var days=[];var d=new Date(from);while(d<=to){days.push(fmtD(d));d.setDate(d.getDate()+1);}
+  if(days.length>60){status.innerHTML='<span style="color:#E53935">Max 60 days for daily data. Narrow the date range.</span>';return;}
   var origText=btn.innerHTML;
   btn.innerHTML="Loading...";btn.style.opacity=".6";btn.style.pointerEvents="none";
   status.textContent="Fetching "+days.length+" days...";
 
-  // Helper to fetch a range of days
   async function fetchDays(dayList,statusPrefix){
     var result=[];
     for(var i=0;i<dayList.length;i++){
@@ -1180,11 +1121,10 @@ async function fetchHistorical(){
       var data=await resp.json();
       var dayEvents=data.data||[];
       var dayObj={date:dayList[i],_titles:{}};
-
       dayEvents.forEach(function(e){
         if(!dayObj[e.action])dayObj[e.action]=0;
         dayObj[e.action]+=e.events;
-        if(["Blog","Page","Podcast"].indexOf(e.action)>-1 && e.label.indexOf(": ")>-1){
+        if(["Blog","Page","Podcast"].indexOf(e.action)>-1&&e.label.indexOf(": ")>-1){
           var title=e.label.split(": ").slice(1).join(": ");
           var key=e.action+": "+title;
           if(!dayObj._titles[key])dayObj._titles[key]=0;
@@ -1206,313 +1146,110 @@ async function fetchHistorical(){
         if(e.action==="Share"){var sk="share_"+e.label;if(!dayObj[sk])dayObj[sk]=0;dayObj[sk]+=e.events;}
         if(e.action==="Save"){var svk="save_"+e.label;if(!dayObj[svk])dayObj[svk]=0;dayObj[svk]+=e.events;}
       });
-
       result.push(dayObj);
     }
     return result;
   }
 
   try{
-    // Fetch current period
     var dailyData=await fetchDays(days,"Current period:");
     histData=dailyData;
-
-    // Fetch prior period (same length, immediately before)
     var periodLen=days.length;
-    var prevEnd=new Date(from);
-    prevEnd.setDate(prevEnd.getDate()-1);
-    var prevStart=new Date(prevEnd);
-    prevStart.setDate(prevStart.getDate()-periodLen+1);
-    var prevDays=[];
-    var pd=new Date(prevStart);
-    while(pd<=prevEnd){prevDays.push(fmtD(pd));pd.setDate(pd.getDate()+1);}
-
+    var prevEnd=new Date(from);prevEnd.setDate(prevEnd.getDate()-1);
+    var prevStart=new Date(prevEnd);prevStart.setDate(prevStart.getDate()-periodLen+1);
+    var prevDays=[];var pd=new Date(prevStart);while(pd<=prevEnd){prevDays.push(fmtD(pd));pd.setDate(pd.getDate()+1);}
     status.textContent="Fetching prior period for comparison...";
     histPrevData=await fetchDays(prevDays,"Prior period:");
-
-    // Build top content list from aggregated data
     var titleTotals={};
-    histData.forEach(function(d){
-      Object.keys(d._titles).forEach(function(k){
-        if(!titleTotals[k])titleTotals[k]=0;
-        titleTotals[k]+=d._titles[k];
-      });
-    });
+    histData.forEach(function(d){Object.keys(d._titles).forEach(function(k){if(!titleTotals[k])titleTotals[k]=0;titleTotals[k]+=d._titles[k];});});
     histTopContent=Object.keys(titleTotals).sort(function(a,b){return titleTotals[b]-titleTotals[a]}).slice(0,10);
-
     status.innerHTML='<span style="color:#2E7D32">'+days.length+' days loaded (+ '+prevDays.length+' day prior period).</span>';
     rebuildHistSelectors();
     renderHistoricalCharts();
     renderLeaderboard();
-
   }catch(err){
     status.innerHTML='<span style="color:#E53935">Fetch failed: '+err.message+'</span>';
   }
-
   btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";
 }
 
 function renderHistoricalCharts(){
   if(!histData||!histData.length)return;
-
-  // Get selected metrics from checkboxes
   var selectedMetrics=[];
-  document.querySelectorAll(".hist-metric-cb:checked").forEach(function(cb){
-    selectedMetrics.push(cb.dataset.metric);
-  });
-  // Add extra content lines
-  extraTrafficLines.forEach(function(k){
-    if(selectedMetrics.indexOf(k)===-1)selectedMetrics.push(k);
-  });
+  document.querySelectorAll(".hist-metric-cb:checked").forEach(function(cb){selectedMetrics.push(cb.dataset.metric);});
+  extraTrafficLines.forEach(function(k){if(selectedMetrics.indexOf(k)===-1)selectedMetrics.push(k);});
   if(selectedMetrics.length<1)selectedMetrics=["Impression"];
-
-  var labels=histData.map(function(d){
-    var p=d.date.split("-");
-    return parseInt(p[1])+"/"+parseInt(p[2]);
-  });
-
-  // Destroy old charts
+  var labels=histData.map(function(d){var p=d.date.split("-");return parseInt(p[1])+"/"+parseInt(p[2]);});
   if(charts.histTraffic)charts.histTraffic.destroy();
   if(charts.histWidget)charts.histWidget.destroy();
   if(charts.histDetail)charts.histDetail.destroy();
-
-  // Helper: get value for a metric key from a day object
-  function getVal(d,key){
-    if(d._titles && d._titles[key]!==undefined)return d._titles[key];
-    return d[key]||0;
-  }
-
+  function getVal(d,key){if(d._titles&&d._titles[key]!==undefined)return d._titles[key];return d[key]||0;}
   var dispLabel={"Impression":"Page Visits","Daily Visit":"Daily Visitors"};
   function dLabel(k){var l=dispLabel[k]||k;return l.length>35?l.slice(0,34)+"\u2026":l;}
-
   var trafficColors=["#0960BB","#FFBF3F","#2E7D32","#7C3AED","#E53935","#D97706","#0891B2","#8B5CF6"];
-
-  // Build datasets for selected metrics
   var datasets=selectedMetrics.map(function(key,i){
-    return{
-      label:dLabel(key),
-      data:histData.map(function(d){return getVal(d,key)}),
-      borderColor:trafficColors[i%trafficColors.length],
-      backgroundColor:trafficColors[i%trafficColors.length]+"15",
-      fill:i<2,
-      tension:0.3,
-      pointRadius:3,
-      pointHoverRadius:5,
-      borderWidth:2
-    };
+    return{label:dLabel(key),data:histData.map(function(d){return getVal(d,key)}),borderColor:trafficColors[i%trafficColors.length],backgroundColor:trafficColors[i%trafficColors.length]+"15",fill:i<2,tension:0.3,pointRadius:3,pointHoverRadius:5,borderWidth:2};
   });
+  charts.histTraffic=new Chart(document.getElementById("c-hist-traffic"),{type:"line",data:{labels:labels,datasets:datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{font:{size:11},padding:10}}},scales:{y:{beginAtZero:true,grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099"}},x:{grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099",maxRotation:45}}},interaction:{mode:"index",intersect:false}}});
 
-  charts.histTraffic=new Chart(document.getElementById("c-hist-traffic"),{
-    type:"line",
-    data:{labels:labels,datasets:datasets},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{font:{size:11},padding:10}}},scales:{y:{beginAtZero:true,grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099"}},x:{grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099",maxRotation:45}}},interaction:{mode:"index",intersect:false}}
-  });
-
-  // Insights based on primary selected metric
-  var pm=selectedMetrics[0];
-  var pmLabel=dLabel(pm);
+  var pm=selectedMetrics[0];var pmLabel=dLabel(pm);
   var totalPM=histData.reduce(function(s,d){return s+getVal(d,pm)},0);
   var peakDay=histData.reduce(function(best,d){return getVal(d,pm)>getVal(best,pm)?d:best},histData[0]);
   var avgPM=(totalPM/histData.length).toFixed(1);
-
   var ihtml='<div class="insights"><h3>Trend Analysis</h3><div>';
   ihtml+='<div><strong>'+pmLabel+':</strong> '+totalPM+' total over '+histData.length+' days (avg '+avgPM+'/day). Peak: '+peakDay.date+' with '+getVal(peakDay,pm)+'.</div>';
-
-  // Show totals for other selected metrics
-  selectedMetrics.slice(1).forEach(function(key){
-    var t=histData.reduce(function(s,d){return s+getVal(d,key)},0);
-    var a=(t/histData.length).toFixed(1);
-    ihtml+='<div><strong>'+dLabel(key)+':</strong> '+t+' total (avg '+a+'/day).</div>';
-  });
-
-  if(histData.length>=3){
-    var firstHalf=histData.slice(0,Math.floor(histData.length/2));
-    var secondHalf=histData.slice(Math.floor(histData.length/2));
-    var avg1=firstHalf.reduce(function(s,d){return s+getVal(d,pm)},0)/firstHalf.length;
-    var avg2=secondHalf.reduce(function(s,d){return s+getVal(d,pm)},0)/secondHalf.length;
-    var trendPct=avg1>0?((avg2-avg1)/avg1*100).toFixed(0):0;
-    var trendDir=trendPct>5?"trending up \u2191":trendPct<-5?"trending down \u2193":"holding steady \u2192";
-    ihtml+='<div><strong>Direction:</strong> '+pmLabel+' is '+trendDir+' ('+trendPct+'% change, first half vs second half).</div>';
-  }
-
+  selectedMetrics.slice(1).forEach(function(key){var t=histData.reduce(function(s,d){return s+getVal(d,key)},0);var a=(t/histData.length).toFixed(1);ihtml+='<div><strong>'+dLabel(key)+':</strong> '+t+' total (avg '+a+'/day).</div>';});
+  if(histData.length>=3){var firstHalf=histData.slice(0,Math.floor(histData.length/2));var secondHalf=histData.slice(Math.floor(histData.length/2));var avg1=firstHalf.reduce(function(s,d){return s+getVal(d,pm)},0)/firstHalf.length;var avg2=secondHalf.reduce(function(s,d){return s+getVal(d,pm)},0)/secondHalf.length;var trendPct=avg1>0?((avg2-avg1)/avg1*100).toFixed(0):0;var trendDir=trendPct>5?"trending up ↑":trendPct<-5?"trending down ↓":"holding steady →";ihtml+='<div><strong>Direction:</strong> '+pmLabel+' is '+trendDir+' ('+trendPct+'% change, first half vs second half).</div>';}
   ihtml+='</div></div>';
-  // CommandBar Pip Interactions chart
-  var widgetMetrics=[
-    {key:"Open",label:"Rail Opens",color:CL.navy},
-    {key:"Share",label:"Shares",color:CL.green},
-    {key:"Save",label:"Saves",color:CL.gold},
-    {key:"Nudge",label:"Nudges",color:CL.red},
-    {key:"Nudge Dismiss",label:"Nudge Dismisses",color:"#8A9099"},
-    {key:"Click",label:"Nav Clicks",color:CL.blue}
-  ];
-  charts.histWidget=new Chart(document.getElementById("c-hist-widget"),{
-    type:"line",
-    data:{
-      labels:labels,
-      datasets:widgetMetrics.map(function(m){
-        return{label:m.label,data:histData.map(function(d){return d[m.key]||0}),borderColor:m.color,backgroundColor:m.color+"10",fill:false,tension:0.3,pointRadius:2,pointHoverRadius:5,borderWidth:2};
-      })
-    },
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{font:{size:11},padding:10}}},scales:{y:{beginAtZero:true,grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099"}},x:{grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099",maxRotation:45}}},interaction:{mode:"index",intersect:false}}
-  });
 
-  // CommandBar Rail Interactions chart
-  var detailMetrics=[
-    {key:"click_mystuff",label:"My Stuff",color:CL.navy},
-    {key:"click_signup",label:"Signup",color:CL.blue},
-    {key:"click_blog",label:"Blog Nav",color:"#D97706"},
-    {key:"click_podcast",label:"Podcast Nav",color:"#7C3AED"},
-    {key:"click_events",label:"Events Nav",color:"#059669"},
-    {key:"click_discover",label:"Discover",color:"#0891B2"},
-    {key:"click_recent",label:"Recent Nav",color:"#6B7280"},
-    {key:"click_saved",label:"Saved Nav",color:"#8B5CF6"}
-  ];
-  var activeDetail=detailMetrics.filter(function(m){
-    return histData.some(function(d){return(d[m.key]||0)>0});
-  });
-  if(activeDetail.length>0){
-    charts.histDetail=new Chart(document.getElementById("c-hist-detail"),{
-      type:"line",
-      data:{
-        labels:labels,
-        datasets:activeDetail.map(function(m){
-          return{label:m.label,data:histData.map(function(d){return d[m.key]||0}),borderColor:m.color,backgroundColor:m.color+"10",fill:false,tension:0.3,pointRadius:2,pointHoverRadius:5,borderWidth:2};
-        })
-      },
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{font:{size:11},padding:8}}},scales:{y:{beginAtZero:true,grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099",stepSize:1}},x:{grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099",maxRotation:45}}},interaction:{mode:"index",intersect:false}}
-    });
-  }
+  var widgetMetrics=[{key:"Open",label:"Rail Opens",color:CL.navy},{key:"Share",label:"Shares",color:CL.green},{key:"Save",label:"Saves",color:CL.gold},{key:"Nudge",label:"Nudges",color:CL.red},{key:"Nudge Dismiss",label:"Nudge Dismisses",color:"#8A9099"},{key:"Click",label:"Nav Clicks",color:CL.blue}];
+  charts.histWidget=new Chart(document.getElementById("c-hist-widget"),{type:"line",data:{labels:labels,datasets:widgetMetrics.map(function(m){return{label:m.label,data:histData.map(function(d){return d[m.key]||0}),borderColor:m.color,backgroundColor:m.color+"10",fill:false,tension:0.3,pointRadius:2,pointHoverRadius:5,borderWidth:2};})},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{font:{size:11},padding:10}}},scales:{y:{beginAtZero:true,grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099"}},x:{grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099",maxRotation:45}}},interaction:{mode:"index",intersect:false}}});
 
-  // Insights based on primary selected metric
+  var detailMetrics=[{key:"click_mystuff",label:"My Stuff",color:CL.navy},{key:"click_signup",label:"Signup",color:CL.blue},{key:"click_blog",label:"Blog Nav",color:"#D97706"},{key:"click_podcast",label:"Podcast Nav",color:"#7C3AED"},{key:"click_events",label:"Events Nav",color:"#059669"},{key:"click_discover",label:"Discover",color:"#0891B2"},{key:"click_recent",label:"Recent Nav",color:"#6B7280"},{key:"click_saved",label:"Saved Nav",color:"#8B5CF6"}];
+  var activeDetail=detailMetrics.filter(function(m){return histData.some(function(d){return(d[m.key]||0)>0});});
+  if(activeDetail.length>0){charts.histDetail=new Chart(document.getElementById("c-hist-detail"),{type:"line",data:{labels:labels,datasets:activeDetail.map(function(m){return{label:m.label,data:histData.map(function(d){return d[m.key]||0}),borderColor:m.color,backgroundColor:m.color+"10",fill:false,tension:0.3,pointRadius:2,pointHoverRadius:5,borderWidth:2};})},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{font:{size:11},padding:8}}},scales:{y:{beginAtZero:true,grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099",stepSize:1}},x:{grid:{color:"#F0F2F5"},ticks:{font:{size:11},color:"#8A9099",maxRotation:45}}},interaction:{mode:"index",intersect:false}}});}
+
   document.getElementById("hist-insights").innerHTML=ihtml;
 }
 
 function renderLeaderboard(){
   var el=document.getElementById("leaderboard-inner");
   if(!el||!histData||!histData.length)return;
-
-  // Aggregate current period
-  var titleTotals={};
-  var titleDaily={};
-  histData.forEach(function(day){
-    if(!day._titles)return;
-    Object.keys(day._titles).forEach(function(key){
-      if(!titleTotals[key])titleTotals[key]=0;
-      titleTotals[key]+=day._titles[key];
-      if(!titleDaily[key])titleDaily[key]=[];
-    });
-  });
-  Object.keys(titleDaily).forEach(function(key){
-    histData.forEach(function(day){
-      titleDaily[key].push(day._titles&&day._titles[key]?day._titles[key]:0);
-    });
-  });
-
-  // Aggregate prior period
-  var prevTotals={};
-  var prevDaily={};
-  if(histPrevData&&histPrevData.length){
-    histPrevData.forEach(function(day){
-      if(!day._titles)return;
-      Object.keys(day._titles).forEach(function(key){
-        if(!prevTotals[key])prevTotals[key]=0;
-        prevTotals[key]+=day._titles[key];
-        if(!prevDaily[key])prevDaily[key]=[];
-      });
-    });
-    Object.keys(prevDaily).forEach(function(key){
-      histPrevData.forEach(function(day){
-        prevDaily[key].push(day._titles&&day._titles[key]?day._titles[key]:0);
-      });
-    });
-  }
-
+  var titleTotals={};var titleDaily={};
+  histData.forEach(function(day){if(!day._titles)return;Object.keys(day._titles).forEach(function(key){if(!titleTotals[key])titleTotals[key]=0;titleTotals[key]+=day._titles[key];if(!titleDaily[key])titleDaily[key]=[];});});
+  Object.keys(titleDaily).forEach(function(key){histData.forEach(function(day){titleDaily[key].push(day._titles&&day._titles[key]?day._titles[key]:0);});});
+  var prevTotals={};var prevDaily={};
+  if(histPrevData&&histPrevData.length){histPrevData.forEach(function(day){if(!day._titles)return;Object.keys(day._titles).forEach(function(key){if(!prevTotals[key])prevTotals[key]=0;prevTotals[key]+=day._titles[key];if(!prevDaily[key])prevDaily[key]=[];});});Object.keys(prevDaily).forEach(function(key){histPrevData.forEach(function(day){prevDaily[key].push(day._titles&&day._titles[key]?day._titles[key]:0);});});}
   var sorted=Object.keys(titleTotals).sort(function(a,b){return titleTotals[b]-titleTotals[a]}).slice(0,15);
   if(sorted.length===0){el.innerHTML='';return;}
-
   var maxTotal=titleTotals[sorted[0]]||1;
   var hasPrev=histPrevData&&histPrevData.length>0;
-
   var html='<div class="chart-card" style="flex:1 1 100%;margin-bottom:16px">';
   html+='<div class="chart-title">Content Leaderboard</div>';
-  html+='<div style="font-size:11px;color:#8A9099;margin:-6px 0 8px">Top content by total events'+(hasPrev?' \u2014 colored bars = current, <span style="color:#D0D5DD">\u2588</span> grey = prior period':'')+'</div>';
-
+  html+='<div style="font-size:11px;color:#8A9099;margin:-6px 0 8px">Top content by total events'+(hasPrev?' — colored bars = current, <span style="color:#D0D5DD">█</span> grey = prior period':'')+'</div>';
   sorted.forEach(function(key,idx){
-    var total=titleTotals[key];
-    var daily=titleDaily[key]||[];
-    var prevTotal=prevTotals[key]||0;
-    var prev=prevDaily[key]||[];
-    var barPct=Math.round((total/maxTotal)*100);
-
-    var type=key.split(": ")[0];
-    var title=key.split(": ").slice(1).join(": ");
-    var typeColor=type==="Blog"?"#0960BB":type==="Podcast"?"#B48A00":"#8A9099";
-    var typeBg=type==="Blog"?"#0960BB14":type==="Podcast"?"#FFBF3F14":"#8A909914";
-
-    // Change vs prior period
+    var total=titleTotals[key];var daily=titleDaily[key]||[];var prevTotal=prevTotals[key]||0;var prev=prevDaily[key]||[];var barPct=Math.round((total/maxTotal)*100);
+    var type=key.split(": ")[0];var title=key.split(": ").slice(1).join(": ");
+    var typeColor=type==="Blog"?"#0960BB":type==="Podcast"?"#B48A00":"#8A9099";var typeBg=type==="Blog"?"#0960BB14":type==="Podcast"?"#FFBF3F14":"#8A909914";
     var changePct=prevTotal>0?Math.round((total-prevTotal)/prevTotal*100):total>0?100:0;
-    var changeArrow=changePct>0?"\u2191"+changePct+"%":changePct<0?"\u2193"+Math.abs(changePct)+"%":"\u2192";
-    var changeColor=changePct>0?"#2E7D32":changePct<0?"#E53935":"#8A9099";
-
-    // Dual mini bar chart SVG
-    var sparkW=130;
-    var sparkH=30;
-    var allVals=daily.concat(prev);
-    var maxDay=Math.max.apply(null,allVals.length>0?allVals:[0])||1;
-    var numDays=Math.max(daily.length,prev.length,1);
-    var barGap=1;
-    var groupW=(sparkW-barGap*(numDays-1))/numDays;
-    var barW=prev.length>0?groupW/2-0.5:groupW;
-
+    var changeArrow=changePct>0?"↑"+changePct+"%":changePct<0?"↓"+Math.abs(changePct)+"%":"→";var changeColor=changePct>0?"#2E7D32":changePct<0?"#E53935":"#8A9099";
+    var sparkW=130;var sparkH=30;var allVals=daily.concat(prev);var maxDay=Math.max.apply(null,allVals.length>0?allVals:[0])||1;var numDays=Math.max(daily.length,prev.length,1);var barGap=1;var groupW=(sparkW-barGap*(numDays-1))/numDays;var barW=prev.length>0?groupW/2-0.5:groupW;
     html+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;'+(idx<sorted.length-1?'border-bottom:1px solid #F0F2F5;':'')+'">';
-
-    // Rank
     html+='<div style="width:22px;font-size:11px;font-weight:700;color:'+(idx<3?"#002D72":"#8A9099")+';text-align:center;flex-shrink:0">'+(idx+1)+'</div>';
-
-    // Title + type
-    html+='<div style="flex:1;min-width:0;overflow:hidden">';
-    html+='<div style="font-size:12px;font-weight:500;color:#1A1A2E;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+title+'</div>';
-    html+='<span style="font-size:9px;font-weight:600;padding:1px 6px;border-radius:6px;background:'+typeBg+';color:'+typeColor+'">'+type+'</span>';
-    html+='</div>';
-
-    // Mini bar chart
+    html+='<div style="flex:1;min-width:0;overflow:hidden"><div style="font-size:12px;font-weight:500;color:#1A1A2E;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+title+'</div><span style="font-size:9px;font-weight:600;padding:1px 6px;border-radius:6px;background:'+typeBg+';color:'+typeColor+'">'+type+'</span></div>';
     var sparkColor=changePct>0?"#2E7D32":changePct<0?"#C62828":"#455A64";
-    html+='<div style="flex-shrink:0;width:'+sparkW+'px">';
-    html+='<svg width="'+sparkW+'" height="'+sparkH+'" viewBox="0 0 '+sparkW+' '+sparkH+'">';
-    for(var di=0;di<numDays;di++){
-      var x=di*(groupW+barGap);
-      // Prior period bar (grey)
-      if(prev.length>0&&di<prev.length){
-        var ph=prev[di]>0?Math.max(2,(prev[di]/maxDay)*(sparkH-2)):0;
-        if(ph>0)html+='<rect x="'+x.toFixed(1)+'" y="'+(sparkH-ph).toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+ph.toFixed(1)+'" rx="1" fill="#D0D5DD"/>';
-      }
-      // Current period bar (colored)
-      var cx=prev.length>0?x+barW+1:x;
-      if(di<daily.length){
-        var ch=daily[di]>0?Math.max(2,(daily[di]/maxDay)*(sparkH-2)):0;
-        if(ch>0)html+='<rect x="'+cx.toFixed(1)+'" y="'+(sparkH-ch).toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+ch.toFixed(1)+'" rx="1" fill="'+sparkColor+'"/>';
-      }
-    }
+    html+='<div style="flex-shrink:0;width:'+sparkW+'px"><svg width="'+sparkW+'" height="'+sparkH+'" viewBox="0 0 '+sparkW+' '+sparkH+'">';
+    for(var di=0;di<numDays;di++){var x=di*(groupW+barGap);if(prev.length>0&&di<prev.length){var ph=prev[di]>0?Math.max(2,(prev[di]/maxDay)*(sparkH-2)):0;if(ph>0)html+='<rect x="'+x.toFixed(1)+'" y="'+(sparkH-ph).toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+ph.toFixed(1)+'" rx="1" fill="#D0D5DD"/>';}var cx=prev.length>0?x+barW+1:x;if(di<daily.length){var ch=daily[di]>0?Math.max(2,(daily[di]/maxDay)*(sparkH-2)):0;if(ch>0)html+='<rect x="'+cx.toFixed(1)+'" y="'+(sparkH-ch).toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+ch.toFixed(1)+'" rx="1" fill="'+sparkColor+'"/>';}}
     html+='</svg></div>';
-
-    // Total + change
-    html+='<div style="flex-shrink:0;text-align:right;width:65px">';
-    html+='<div style="font-size:14px;font-weight:700;color:#002D72">'+total+'</div>';
-    html+='<div style="font-size:10px;color:'+changeColor+';font-weight:600">'+changeArrow+'</div>';
-    if(hasPrev&&prevTotal>0)html+='<div style="font-size:9px;color:#8A9099">was '+prevTotal+'</div>';
-    html+='</div>';
-
-    // Bar
-    html+='<div style="flex-shrink:0;width:80px;height:6px;background:#F5F7FA;border-radius:3px;overflow:hidden">';
-    html+='<div style="height:100%;width:'+barPct+'%;background:#0960BB;border-radius:3px"></div>';
-    html+='</div>';
-
+    html+='<div style="flex-shrink:0;text-align:right;width:65px"><div style="font-size:14px;font-weight:700;color:#002D72">'+total+'</div><div style="font-size:10px;color:'+changeColor+';font-weight:600">'+changeArrow+'</div>'+(hasPrev&&prevTotal>0?'<div style="font-size:9px;color:#8A9099">was '+prevTotal+'</div>':'')+'</div>';
+    html+='<div style="flex-shrink:0;width:80px;height:6px;background:#F5F7FA;border-radius:3px;overflow:hidden"><div style="height:100%;width:'+barPct+'%;background:#0960BB;border-radius:3px"></div></div>';
     html+='</div>';
   });
-
   html+='</div>';
   el.innerHTML=html;
 }
+
+// ── TAB SWITCHING ──
 document.querySelectorAll("#tabs-bar .tab").forEach(btn=>{
   btn.addEventListener("click",()=>{
     document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
@@ -1521,24 +1258,17 @@ document.querySelectorAll("#tabs-bar .tab").forEach(btn=>{
     ["overview","content","insights","engagement","historical","leaderboard","companies","map"].forEach(t=>{
       document.getElementById("tab-"+t).classList.toggle("hidden",t!==currentTab);
     });
-    // Auto-load historical data when tab is opened for the first time
-    if((currentTab==="historical"||currentTab==="leaderboard") && !histData){
-      setTimeout(fetchHistorical,100);
+    if((currentTab==="historical"||currentTab==="leaderboard")&&!histData){setTimeout(fetchHistorical,100);}
+    if(currentTab==="leaderboard"&&histData){renderLeaderboard();}
+    if(currentTab==="companies"){
+      fetchLfFeeds(); // Kick off feed load (no-op if already done)
+      if(!companiesData){setTimeout(fetchCompanies,100);}
+      else{renderCompaniesTable();}
     }
-    if(currentTab==="leaderboard" && histData){
-      renderLeaderboard();
-    }
-    if(currentTab==="companies" && !companiesData){
-      setTimeout(fetchCompanies,100);
-    }
-    if(currentTab==="companies" && companiesData){
-      renderCompaniesTable();
-    }
-    if(currentTab==="map" && !companiesData){
-      setTimeout(fetchMapData,100);
-    }
-    if(currentTab==="map" && companiesData && mapStateData){
-      renderUSMap();
+    if(currentTab==="map"){
+      fetchLfFeeds();
+      if(!companiesData){setTimeout(fetchMapData,100);}
+      else if(mapStateData){renderUSMap();}
     }
   });
 });
@@ -1550,304 +1280,110 @@ async function fetchAPI(){
   const fromEl=document.getElementById("date-from");
   const toEl=document.getElementById("date-to");
   const btn=document.getElementById("fetch-btn");
-
-  if(!fromEl.value||!toEl.value){
-    document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>Select both start and end dates.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
-    return;
-  }
-
-  const from=fromEl.value.replace(/-/g,"");
-  const to=toEl.value.replace(/-/g,"");
-  if(from>to){
-    document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>Start date must be before end date.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
-    return;
-  }
-
-  const origText=btn.innerHTML;
-  btn.innerHTML="Fetching...";btn.style.opacity=".6";btn.style.pointerEvents="none";
+  if(!fromEl.value||!toEl.value){document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>Select both start and end dates.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';return;}
+  const from=fromEl.value.replace(/-/g,"");const to=toEl.value.replace(/-/g,"");
+  if(from>to){document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>Start date must be before end date.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';return;}
+  const origText=btn.innerHTML;btn.innerHTML="Fetching...";btn.style.opacity=".6";btn.style.pointerEvents="none";
   document.getElementById("import-msg").innerHTML="";
-
   try{
     const url=WORKER_URL+"?period="+from+"_"+to+"&page_size=1000";
     const resp=await fetch(url);
-    if(!resp.ok){
-      const err=await resp.text();
-      throw new Error("API returned "+resp.status+": "+err);
-    }
+    if(!resp.ok){const err=await resp.text();throw new Error("API returned "+resp.status+": "+err);}
     const result=await resp.json();
-
-    if(result.error){
-      throw new Error(result.error+(result.detail?" — "+result.detail:""));
-    }
-
-    if(!result.data||result.data.length===0){
-      document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>No CommandBar events found for this date range.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
-      btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";
-      return;
-    }
-
+    if(result.error){throw new Error(result.error+(result.detail?" — "+result.detail:""));}
+    if(!result.data||result.data.length===0){document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>No CommandBar events found for this date range.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";return;}
     RAW_DATA=result.data;
-    // Format period for display
     const fd=fromEl.value,td=toEl.value;
     const fmtDate=function(d){var p=d.split("-");var m=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];return m[parseInt(p[1],10)-1]+" "+parseInt(p[2],10)+", "+p[0]};
     PERIOD=fmtDate(fd)+(fd===td?"":" \u2013 "+fmtDate(td));
     hasData=true;
-
     document.getElementById("import-msg").innerHTML='<div class="import-msg success"><span>'+result.data.length+' events loaded via API for '+PERIOD+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
     render();
-
   }catch(err){
     console.error("API fetch error:",err);
     document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>Fetch failed: '+err.message+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
   }
-
   btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";
 }
 
-// Set default date range (last 7 days)
+// ── DATE DEFAULTS ──
 (function(){
-  var today=new Date();
-  var week=new Date(today);week.setDate(week.getDate()-6);
+  var today=new Date();var week=new Date(today);week.setDate(week.getDate()-6);
   var fmt=function(d){var y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),dd=String(d.getDate()).padStart(2,"0");return y+"-"+m+"-"+dd;};
   document.getElementById("date-from").value=fmt(week);
   document.getElementById("date-to").value=fmt(today);
 })();
 
-// ── IMPORT ──
+// ── CSV IMPORT ──
 document.getElementById("csv-input").addEventListener("change",function(e){
-  const file=e.target.files?.[0];
-  if(!file)return;
+  const file=e.target.files?.[0];if(!file)return;
   const reader=new FileReader();
   reader.onload=function(evt){
     try{
       const result=parseCSV(evt.target.result);
-      if(result.data.length===0){
-        document.getElementById("import-msg").innerHTML=`<div class="import-msg error"><span>No CommandBar events found.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>`;
-        return;
-      }
-      RAW_DATA=result.data;
-      if(result.period)PERIOD=result.period;
-      hasData=true;
+      if(result.data.length===0){document.getElementById("import-msg").innerHTML=`<div class="import-msg error"><span>No CommandBar events found.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>`;return;}
+      RAW_DATA=result.data;if(result.period)PERIOD=result.period;hasData=true;
       document.getElementById("import-msg").innerHTML=`<div class="import-msg success"><span>${result.data.length} events loaded from ${file.name}</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>`;
       render();
-    }catch(err){
-      document.getElementById("import-msg").innerHTML=`<div class="import-msg error"><span>Parse error: ${err.message}</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>`;
-    }
+    }catch(err){document.getElementById("import-msg").innerHTML=`<div class="import-msg error"><span>Parse error: ${err.message}</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>`;}
   };
-  reader.readAsText(file,"utf-16");
-  this.value="";
+  reader.readAsText(file,"utf-16");this.value="";
 });
 
 // ── EXPORT PDF ──
 async function exportPDF(){
-  const btn=document.getElementById("export-btn");
-  const origText=btn.innerHTML;
+  const btn=document.getElementById("export-btn");const origText=btn.innerHTML;
   btn.innerHTML="Generating...";btn.style.opacity=".6";btn.style.pointerEvents="none";
-
   try{
-    const {jsPDF}=window.jspdf;
-    const pdf=new jsPDF("l","mm","a4");
-    const pw=pdf.internal.pageSize.getWidth();
-    const ph=pdf.internal.pageSize.getHeight();
-    const margin=12;
-    const contentW=pw-margin*2;
-    const headerH=27;
-    const footerH=8;
-    const availH=ph-headerH-footerH;
-    let pageCount=0;
-
-    function drawHeader(title,contd){
-      pdf.setFillColor(0,45,114);
-      pdf.rect(0,0,pw,18,"F");
-      pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);
-      pdf.text("CommandBar Analytics v2.2.1",margin,12);
-      pdf.setFont("helvetica","normal");pdf.setFontSize(9);
-      pdf.text((PERIOD?PERIOD+" \u00b7 ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});
-      pdf.setFillColor(9,96,187);
-      pdf.rect(0,18,pw,6,"F");
-      pdf.setFont("helvetica","bold");pdf.setFontSize(8);pdf.setTextColor(255,255,255);
-      pdf.text(title.toUpperCase()+(contd?" (CONTINUED)":""),margin,22.5);
-      pdf.setTextColor(0,0,0);
-    }
-    function drawFooter(n){
-      pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);
-      pdf.text("CommandBar Analytics Dashboard v2.2.1 \u00b7 SiteImprove Events",margin,ph-5);
-      pdf.text("Page "+n,pw-margin,ph-5,{align:"right"});
-    }
-
-    function addPage(title,contd){
-      if(pageCount>0)pdf.addPage();
-      pageCount++;
-      drawHeader(title,contd||false);
-      drawFooter(pageCount);
-    }
-
-    // Capture a DOM element as image and add to PDF (single page, scale to fit)
-    async function captureAndAdd(el,tabName){
-      const canvas=await html2canvas(el,{scale:2,backgroundColor:"#F5F7FA",useCORS:true,logging:false,windowWidth:980});
-      const imgData=canvas.toDataURL("image/jpeg",0.92);
-      const imgW=contentW;
-      const imgH=(canvas.height/canvas.width)*contentW;
-      const finalH=Math.min(imgH,availH);
-      const finalW=imgH>availH?(availH/imgH)*imgW:imgW;
-      const xOff=margin+(contentW-finalW)/2;
-      addPage(tabName);
-      pdf.addImage(imgData,"JPEG",xOff,headerH,finalW,finalH);
-    }
-
-    // Draw native content table (top 15)
+    const {jsPDF}=window.jspdf;const pdf=new jsPDF("l","mm","a4");const pw=pdf.internal.pageSize.getWidth();const ph=pdf.internal.pageSize.getHeight();const margin=12;const contentW=pw-margin*2;const headerH=27;const footerH=8;const availH=ph-headerH-footerH;let pageCount=0;
+    function drawHeader(title,contd){pdf.setFillColor(0,45,114);pdf.rect(0,0,pw,18,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);pdf.text("CommandBar Analytics v2.3.0",margin,12);pdf.setFont("helvetica","normal");pdf.setFontSize(9);pdf.text((PERIOD?PERIOD+" · ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});pdf.setFillColor(9,96,187);pdf.rect(0,18,pw,6,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(8);pdf.setTextColor(255,255,255);pdf.text(title.toUpperCase()+(contd?" (CONTINUED)":""),margin,22.5);pdf.setTextColor(0,0,0);}
+    function drawFooter(n){pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);pdf.text("CommandBar Analytics Dashboard v2.3.0 · SiteImprove Events",margin,ph-5);pdf.text("Page "+n,pw-margin,ph-5,{align:"right"});}
+    function addPage(title,contd){if(pageCount>0)pdf.addPage();pageCount++;drawHeader(title,contd||false);drawFooter(pageCount);}
+    async function captureAndAdd(el,tabName){const canvas=await html2canvas(el,{scale:2,backgroundColor:"#F5F7FA",useCORS:true,logging:false,windowWidth:980});const imgData=canvas.toDataURL("image/jpeg",0.92);const imgW=contentW;const imgH=(canvas.height/canvas.width)*contentW;const finalH=Math.min(imgH,availH);const finalW=imgH>availH?(availH/imgH)*imgW:imgW;const xOff=margin+(contentW-finalW)/2;addPage(tabName);pdf.addImage(imgData,"JPEG",xOff,headerH,finalW,finalH);}
     function drawContentTable(){
-      addPage("Content",true);
-      const d=process(RAW_DATA);
-      const sortedArticles=[...d.articles].sort((a,b)=>{
-        const f=contentSortField,dir=contentSortDir;
-        if(f==="title"||f==="type"){const av=(a[f]||"").toLowerCase(),bv=(b[f]||"").toLowerCase();return dir==="asc"?av.localeCompare(bv):bv.localeCompare(av);}
-        return dir==="asc"?(a[f]||0)-(b[f]||0):(b[f]||0)-(a[f]||0);
-      });
-      const rows=sortedArticles.slice(0,15);
-      const rowH=7;
-      const headH=8;
-
-      // Column layout
-      const cols=[
-        {label:"TITLE",w:contentW*0.42,a:"left"},
-        {label:"TYPE",w:contentW*0.08,a:"center"},
-        {label:"ENGAGED",w:contentW*0.10,a:"center"},
-        {label:"SKIM",w:contentW*0.10,a:"center"},
-        {label:"BOUNCE",w:contentW*0.10,a:"center"},
-        {label:"TOTAL",w:contentW*0.10,a:"center"},
-        {label:"SIGNAL",w:contentW*0.10,a:"center"},
-      ];
-
-      let y=headerH+2;
-
-      // Table title
-      pdf.setFont("helvetica","bold");pdf.setFontSize(10);pdf.setTextColor(0,45,114);
-      pdf.text("Top "+rows.length+" Content by Performance",margin,y+4);
-      y+=10;
-
-      // Header row
-      pdf.setFillColor(0,45,114);
-      pdf.rect(margin,y,contentW,headH,"F");
-      pdf.setFont("helvetica","bold");pdf.setFontSize(7.5);pdf.setTextColor(255,255,255);
-      let x=margin;
-      cols.forEach(c=>{
-        const tx=c.a==="left"?x+3:x+c.w/2;
-        pdf.text(c.label,tx,y+5.5,{align:c.a==="left"?"left":"center"});
-        x+=c.w;
-      });
-      y+=headH;
-
-      // Data rows
+      addPage("Content",true);const d=process(RAW_DATA);
+      const sortedArticles=[...d.articles].sort((a,b)=>{const f=contentSortField,dir=contentSortDir;if(f==="title"||f==="type"){const av=(a[f]||"").toLowerCase(),bv=(b[f]||"").toLowerCase();return dir==="asc"?av.localeCompare(bv):bv.localeCompare(av);}return dir==="asc"?(a[f]||0)-(b[f]||0):(b[f]||0)-(a[f]||0);});
+      const rows=sortedArticles.slice(0,15);const rowH=7;const headH=8;
+      const cols=[{label:"TITLE",w:contentW*0.42,a:"left"},{label:"TYPE",w:contentW*0.08,a:"center"},{label:"ENGAGED",w:contentW*0.10,a:"center"},{label:"SKIM",w:contentW*0.10,a:"center"},{label:"BOUNCE",w:contentW*0.10,a:"center"},{label:"TOTAL",w:contentW*0.10,a:"center"},{label:"SIGNAL",w:contentW*0.10,a:"center"}];
+      let y=headerH+2;pdf.setFont("helvetica","bold");pdf.setFontSize(10);pdf.setTextColor(0,45,114);pdf.text("Top "+rows.length+" Content by Performance",margin,y+4);y+=10;
+      pdf.setFillColor(0,45,114);pdf.rect(margin,y,contentW,headH,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(7.5);pdf.setTextColor(255,255,255);
+      let x=margin;cols.forEach(c=>{const tx=c.a==="left"?x+3:x+c.w/2;pdf.text(c.label,tx,y+5.5,{align:c.a==="left"?"left":"center"});x+=c.w;});y+=headH;
       rows.forEach((a,idx)=>{
-        // Zebra
         if(idx%2===0){pdf.setFillColor(248,249,252);pdf.rect(margin,y,contentW,rowH,"F");}
-
-        x=margin;
-
-        // Title
-        pdf.setFont("helvetica","normal");pdf.setFontSize(8);pdf.setTextColor(26,26,46);
-        const t=a.title.length>60?a.title.slice(0,59)+"\u2026":a.title;
-        pdf.text(t,x+3,y+4.8);
-        x+=cols[0].w;
-
-        // Type
-        const tc=a.type==="Blog"?[9,96,187]:a.type==="Podcast"?[180,140,20]:[138,144,153];
-        pdf.setFont("helvetica","bold");pdf.setFontSize(7.5);pdf.setTextColor(tc[0],tc[1],tc[2]);
-        pdf.text(a.type,x+cols[1].w/2,y+4.8,{align:"center"});
-        x+=cols[1].w;
-
-        // Engaged
+        x=margin;pdf.setFont("helvetica","normal");pdf.setFontSize(8);pdf.setTextColor(26,26,46);
+        const t=a.title.length>60?a.title.slice(0,59)+"\u2026":a.title;pdf.text(t,x+3,y+4.8);x+=cols[0].w;
+        const tc=a.type==="Blog"?[9,96,187]:a.type==="Podcast"?[180,140,20]:[138,144,153];pdf.setFont("helvetica","bold");pdf.setFontSize(7.5);pdf.setTextColor(tc[0],tc[1],tc[2]);pdf.text(a.type,x+cols[1].w/2,y+4.8,{align:"center"});x+=cols[1].w;
         pdf.setFont("helvetica","bold");pdf.setFontSize(8.5);
-        if(a.engaged){pdf.setTextColor(9,96,187);pdf.text(String(a.engaged),x+cols[2].w/2,y+4.8,{align:"center"});}
-        else{pdf.setTextColor(208,213,221);pdf.text("\u2013",x+cols[2].w/2,y+4.8,{align:"center"});}
-        x+=cols[2].w;
-
-        // Skim
-        if(a.skim){pdf.setTextColor(212,160,23);pdf.text(String(a.skim),x+cols[3].w/2,y+4.8,{align:"center"});}
-        else{pdf.setTextColor(208,213,221);pdf.text("\u2013",x+cols[3].w/2,y+4.8,{align:"center"});}
-        x+=cols[3].w;
-
-        // Bounce
-        if(a.bounce){pdf.setTextColor(229,57,53);pdf.text(String(a.bounce),x+cols[4].w/2,y+4.8,{align:"center"});}
-        else{pdf.setTextColor(208,213,221);pdf.text("\u2013",x+cols[4].w/2,y+4.8,{align:"center"});}
-        x+=cols[4].w;
-
-        // Total
-        pdf.setFont("helvetica","bold");pdf.setTextColor(0,45,114);
-        pdf.text(String(a.total),x+cols[5].w/2,y+4.8,{align:"center"});
-        x+=cols[5].w;
-
-        // Signal
-        const sc=a.engPct>=50?[9,96,187]:a.engPct>0?[212,160,23]:[229,57,53];
-        const sl=a.engPct>=50?"Strong":a.engPct>0?"Mixed":"Weak";
-        pdf.setFontSize(7.5);pdf.setTextColor(sc[0],sc[1],sc[2]);
-        pdf.text(sl,x+cols[6].w/2,y+4.8,{align:"center"});
-
-        // Row line
-        pdf.setDrawColor(232,236,240);pdf.setLineWidth(0.2);
-        pdf.line(margin,y+rowH,margin+contentW,y+rowH);
-
-        y+=rowH;
+        if(a.engaged){pdf.setTextColor(9,96,187);pdf.text(String(a.engaged),x+cols[2].w/2,y+4.8,{align:"center"});}else{pdf.setTextColor(208,213,221);pdf.text("\u2013",x+cols[2].w/2,y+4.8,{align:"center"});}x+=cols[2].w;
+        if(a.skim){pdf.setTextColor(212,160,23);pdf.text(String(a.skim),x+cols[3].w/2,y+4.8,{align:"center"});}else{pdf.setTextColor(208,213,221);pdf.text("\u2013",x+cols[3].w/2,y+4.8,{align:"center"});}x+=cols[3].w;
+        if(a.bounce){pdf.setTextColor(229,57,53);pdf.text(String(a.bounce),x+cols[4].w/2,y+4.8,{align:"center"});}else{pdf.setTextColor(208,213,221);pdf.text("\u2013",x+cols[4].w/2,y+4.8,{align:"center"});}x+=cols[4].w;
+        pdf.setFont("helvetica","bold");pdf.setTextColor(0,45,114);pdf.text(String(a.total),x+cols[5].w/2,y+4.8,{align:"center"});x+=cols[5].w;
+        const sc=a.engPct>=50?[9,96,187]:a.engPct>0?[212,160,23]:[229,57,53];const sl=a.engPct>=50?"Strong":a.engPct>0?"Mixed":"Weak";pdf.setFontSize(7.5);pdf.setTextColor(sc[0],sc[1],sc[2]);pdf.text(sl,x+cols[6].w/2,y+4.8,{align:"center"});
+        pdf.setDrawColor(232,236,240);pdf.setLineWidth(0.2);pdf.line(margin,y+rowH,margin+contentW,y+rowH);y+=rowH;
       });
-
-      // Show count note if truncated
-      if(sortedArticles.length>rows.length){
-        y+=4;
-        pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);
-        pdf.text("Showing top "+rows.length+" of "+sortedArticles.length+" total articles. Full data available in the interactive dashboard.",margin,y);
-      }
+      if(sortedArticles.length>rows.length){y+=4;pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);pdf.text("Showing top "+rows.length+" of "+sortedArticles.length+" total articles.",margin,y);}
     }
-
-    // ── Capture tabs ──
     const tabs=["overview","content","insights","engagement","historical","leaderboard","companies","map"];
     const tabNames=["Overview","Content","Performance","Activity","Compare","Trending","Companies","Map"];
     const savedTab=currentTab;
-
     for(let i=0;i<tabs.length;i++){
-      tabs.forEach(t=>{
-        const el=document.getElementById("tab-"+t);
-        el.style.display=t===tabs[i]?"block":"none";
-        el.classList.remove("hidden");
-      });
+      tabs.forEach(t=>{const el=document.getElementById("tab-"+t);el.style.display=t===tabs[i]?"block":"none";el.classList.remove("hidden");});
       await new Promise(r=>setTimeout(r,600));
-
-      if(tabs[i]==="content"){
-        // Page 1: charts screenshot
-        await captureAndAdd(document.getElementById("content-charts"),"Content");
-        // Page 2: native table
-        drawContentTable();
-      }else{
-        await captureAndAdd(document.getElementById("tab-"+tabs[i]),tabNames[i]);
-      }
+      if(tabs[i]==="content"){await captureAndAdd(document.getElementById("content-charts"),"Content");drawContentTable();}
+      else{await captureAndAdd(document.getElementById("tab-"+tabs[i]),tabNames[i]);}
     }
-
-    // Restore tabs
-    tabs.forEach(t=>{
-      const el=document.getElementById("tab-"+t);
-      el.style.display="";
-      el.classList.toggle("hidden",t!==savedTab);
-    });
-
+    tabs.forEach(t=>{const el=document.getElementById("tab-"+t);el.style.display="";el.classList.toggle("hidden",t!==savedTab);});
     pdf.save("CommandBar-Analytics"+(PERIOD?"-"+PERIOD.replace(/[^a-zA-Z0-9]+/g,"-"):"")+".pdf");
-
   }catch(err){
     console.error("PDF export error:",err);
     document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>PDF export failed: '+err.message+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
-    ["overview","content","insights","engagement","historical","leaderboard","companies","map"].forEach(t=>{
-      const el=document.getElementById("tab-"+t);el.style.display="";
-      el.classList.toggle("hidden",t!==currentTab);
-    });
+    ["overview","content","insights","engagement","historical","leaderboard","companies","map"].forEach(t=>{const el=document.getElementById("tab-"+t);el.style.display="";el.classList.toggle("hidden",t!==currentTab);});
   }
-
   btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";
 }
 
 // ── INIT ──
-if(new URLSearchParams(window.location.search).has("csv")){
-  var csvBtn=document.getElementById("csv-btn");
-  if(csvBtn)csvBtn.style.display="";
-}
+if(new URLSearchParams(window.location.search).has("csv")){var csvBtn=document.getElementById("csv-btn");if(csvBtn)csvBtn.style.display="";}
 render();
 </script>
 </body>
