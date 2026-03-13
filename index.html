@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CommandBar Analytics Dashboard v1.8.1</title>
+<title>CommandBar Analytics Dashboard v2.0</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -125,6 +125,7 @@ tbody tr:nth-child(even){background:#FAFBFC}
     <button class="tab" data-tab="engagement">Activity</button>
     <button class="tab" data-tab="historical">Compare</button>
     <button class="tab" data-tab="leaderboard">Trending</button>
+    <button class="tab" data-tab="companies">Companies</button>
   </div>
 
   <!-- Tab Panels -->
@@ -134,8 +135,9 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div id="tab-engagement" class="hidden"></div>
   <div id="tab-historical" class="hidden"></div>
   <div id="tab-leaderboard" class="hidden"></div>
+  <div id="tab-companies" class="hidden"></div>
 
-  <div class="footer" id="footer">CommandBar Analytics Dashboard v1.8.1 · Powered by SiteImprove Events · SouthState Correspondent</div>
+  <div class="footer" id="footer">CommandBar Analytics Dashboard v2.0 · Powered by SiteImprove Events · SouthState Correspondent</div>
 </div>
 
 <script>
@@ -544,6 +546,169 @@ function render(){
   document.getElementById("tab-leaderboard").innerHTML=lhtml;
   if(histData)renderLeaderboard();
 
+  // ── COMPANIES TAB ──
+  var chtml='<div class="charts"><div class="chart-card" style="flex:1 1 100%">';
+  chtml+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">';
+  chtml+='<div class="chart-title" style="margin-bottom:0">Visitor Companies</div>';
+  chtml+='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">';
+  chtml+='<label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#8A9099;cursor:pointer"><input type="checkbox" id="co-filter-banking" checked onchange="renderCompaniesTable()"> Banking & Finance only</label>';
+  chtml+='<label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#8A9099;cursor:pointer"><input type="checkbox" id="co-filter-internal" checked onchange="renderCompaniesTable()"> Hide internal</label>';
+  chtml+='<select id="co-sort" onchange="renderCompaniesTable()" style="padding:4px 8px;border-radius:6px;border:1px solid #E8ECF0;font-size:11px;font-family:inherit">';
+  chtml+='<option value="quality">Quality Score</option><option value="last_visit">Last Visit</option><option value="name">Name</option><option value="employees">Employees</option></select>';
+  chtml+='<button class="import-btn" id="co-fetch-btn" onclick="fetchCompanies()" style="background:#2E7D32;padding:5px 12px;font-size:11px">Load Companies</button>';
+  chtml+='</div></div>';
+  chtml+='<div id="co-status" style="font-size:11px;color:#8A9099;margin-bottom:8px"></div>';
+  chtml+='<div id="co-table"></div>';
+  chtml+='</div></div>';
+  chtml+='<div id="co-insights"></div>';
+  document.getElementById("tab-companies").innerHTML=chtml;
+  if(companiesData)renderCompaniesTable();
+
+}
+
+// ── COMPANIES ──
+var LF_URL="https://leadfeeder-proxy.jameswspence.workers.dev";
+var companiesData=null;
+var INTERNAL_NAMES=["SouthState Bank","SouthState Securities","First Federal","SouthState Correspondent"];
+
+async function fetchCompanies(){
+  var btn=document.getElementById("co-fetch-btn");
+  var status=document.getElementById("co-status");
+  var fromEl=document.getElementById("date-from");
+  var toEl=document.getElementById("date-to");
+
+  var startDate=fromEl&&fromEl.value?fromEl.value:defaultDateStr(-6);
+  var endDate=toEl&&toEl.value?toEl.value:defaultDateStr(0);
+
+  var origText=btn.innerHTML;
+  btn.innerHTML="Loading...";btn.style.opacity=".6";btn.style.pointerEvents="none";
+  status.textContent="Fetching companies...";
+
+  try{
+    var allLeads=[];
+    var pg=1;
+    var more=true;
+    while(more&&pg<=5){
+      status.textContent="Fetching page "+pg+"...";
+      var resp=await fetch(LF_URL+"/leads?start_date="+startDate+"&end_date="+endDate+"&page="+pg+"&page_size=100");
+      var result=await resp.json();
+      if(result.error)throw new Error(result.error);
+      allLeads=allLeads.concat(result.data||[]);
+      more=(result.data||[]).length>=100;
+      pg++;
+    }
+    companiesData=allLeads;
+    status.innerHTML='<span style="color:#2E7D32">'+allLeads.length+' companies loaded.</span>';
+    renderCompaniesTable();
+  }catch(err){
+    status.innerHTML='<span style="color:#E53935">Failed: '+err.message+'</span>';
+  }
+
+  btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";
+}
+
+function defaultDateStr(offset){
+  var d=new Date();d.setDate(d.getDate()+offset);
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+
+function renderCompaniesTable(){
+  var el=document.getElementById("co-table");
+  if(!el||!companiesData)return;
+
+  var bankingOnly=document.getElementById("co-filter-banking");
+  var hideInternal=document.getElementById("co-filter-internal");
+  var sortBy=(document.getElementById("co-sort")||{}).value||"quality";
+
+  var filtered=companiesData.filter(function(c){
+    if(hideInternal&&hideInternal.checked&&INTERNAL_NAMES.some(function(n){return c.name.indexOf(n)>-1}))return false;
+    if(bankingOnly&&bankingOnly.checked){
+      var ind=(c.industry||"").toLowerCase();
+      return ind.indexOf("bank")>-1||ind.indexOf("financial")>-1||ind.indexOf("credit")>-1||ind.indexOf("investment")>-1;
+    }
+    return true;
+  });
+
+  filtered.sort(function(a,b){
+    if(sortBy==="quality")return(b.quality||0)-(a.quality||0);
+    if(sortBy==="last_visit")return(b.last_visit_date||"").localeCompare(a.last_visit_date||"");
+    if(sortBy==="name")return(a.name||"").localeCompare(b.name||"");
+    if(sortBy==="employees")return(b.employee_count||0)-(a.employee_count||0);
+    return 0;
+  });
+
+  if(filtered.length===0){
+    el.innerHTML='<div style="text-align:center;padding:24px;color:#8A9099;font-size:12px">No companies match the current filters.</div>';
+    document.getElementById("co-insights").innerHTML="";
+    return;
+  }
+
+  // Determine if company is new (first visit within the date range)
+  var fromEl=document.getElementById("date-from");
+  var startDate=fromEl&&fromEl.value?fromEl.value:"";
+
+  var html='<table style="width:100%;border-collapse:collapse;font-size:12px">';
+  html+='<thead><tr style="border-bottom:2px solid #E8ECF0">';
+  html+='<th style="text-align:left;padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase;width:40px"></th>';
+  html+='<th style="text-align:left;padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase">Company</th>';
+  html+='<th style="text-align:center;padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase">Industry</th>';
+  html+='<th style="text-align:center;padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase">Size</th>';
+  html+='<th style="text-align:center;padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase">Quality</th>';
+  html+='<th style="text-align:center;padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase">First Visit</th>';
+  html+='<th style="text-align:center;padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase">Last Visit</th>';
+  html+='<th style="text-align:center;padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase">Status</th>';
+  html+='</tr></thead><tbody>';
+
+  filtered.forEach(function(c,i){
+    var isNew=startDate&&c.first_visit_date>=startDate;
+    var qColor=c.quality>=8?"#2E7D32":c.quality>=5?"#0960BB":c.quality>=3?"#FFBF3F":"#8A9099";
+    var qBg=c.quality>=8?"#2E7D3214":c.quality>=5?"#0960BB14":c.quality>=3?"#FFBF3F14":"#F5F7FA";
+    var empLabel=c.employee_count?c.employee_count>=10001?"10k+":c.employee_count>=1000?Math.round(c.employee_count/1000)+"k":String(c.employee_count):"\u2013";
+    var indColor=((c.industry||"").toLowerCase().indexOf("bank")>-1||(c.industry||"").toLowerCase().indexOf("financial")>-1)?"#0960BB":"#8A9099";
+
+    html+='<tr style="border-bottom:1px solid #F0F2F5;'+(i%2===1?"background:#FAFBFC;":"")+'">';
+    // Logo
+    html+='<td style="padding:8px;text-align:center">';
+    if(c.logo_url)html+='<img src="'+c.logo_url+'" style="width:28px;height:28px;border-radius:6px;object-fit:contain;background:#F5F7FA" onerror="this.style.display=\'none\'">';
+    else html+='<div style="width:28px;height:28px;border-radius:6px;background:#E8ECF0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#8A9099;margin:0 auto">'+c.name.charAt(0)+'</div>';
+    html+='</td>';
+    // Name + website
+    html+='<td style="padding:8px"><div style="font-weight:600;color:#1A1A2E">'+c.name+'</div>';
+    if(c.website_url)html+='<div style="font-size:10px;color:#8A9099;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px"><a href="'+c.website_url+'" target="_blank" style="color:#8A9099;text-decoration:none">'+c.website_url.replace(/^https?:\/\//,"").replace(/\/+$/,"")+'</a></div>';
+    if(isNew)html+='<span style="display:inline-block;margin-top:2px;font-size:9px;font-weight:600;padding:1px 6px;border-radius:6px;background:#2E7D3214;color:#2E7D32">NEW</span>';
+    html+='</td>';
+    // Industry
+    html+='<td style="text-align:center;padding:8px"><span style="font-size:10px;font-weight:500;color:'+indColor+'">'+( c.industry||"\u2013")+'</span></td>';
+    // Size
+    html+='<td style="text-align:center;padding:8px;font-size:11px;color:#1A1A2E">'+empLabel+'</td>';
+    // Quality
+    html+='<td style="text-align:center;padding:8px"><span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;font-size:12px;font-weight:700;background:'+qBg+';color:'+qColor+'">'+c.quality+'</span></td>';
+    // First visit
+    html+='<td style="text-align:center;padding:8px;font-size:11px;color:#8A9099">'+( c.first_visit_date||"\u2013")+'</td>';
+    // Last visit
+    html+='<td style="text-align:center;padding:8px;font-size:11px;color:#1A1A2E">'+( c.last_visit_date||"\u2013")+'</td>';
+    // Status
+    var stColor=c.status==="handled"?"#0960BB":c.status==="new"?"#2E7D32":"#8A9099";
+    var stBg=c.status==="handled"?"#0960BB14":c.status==="new"?"#2E7D3214":"#F5F7FA";
+    html+='<td style="text-align:center;padding:8px"><span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:8px;background:'+stBg+';color:'+stColor+'">'+( c.status||"\u2013")+'</span></td>';
+    html+='</tr>';
+  });
+
+  html+='</tbody></table>';
+  el.innerHTML=html;
+
+  // Insights
+  var bankCount=filtered.filter(function(c){var ind=(c.industry||"").toLowerCase();return ind.indexOf("bank")>-1||ind.indexOf("financial")>-1||ind.indexOf("credit")>-1}).length;
+  var newCount=filtered.filter(function(c){return startDate&&c.first_visit_date>=startDate}).length;
+  var highQuality=filtered.filter(function(c){return c.quality>=8}).length;
+
+  var ihtml='<div class="insights"><h3>Company Insights</h3><div>';
+  ihtml+='<div><strong>Total:</strong> '+filtered.length+' companies identified ('+companiesData.length+' total before filters).</div>';
+  ihtml+='<div><strong>Banking & Financial:</strong> '+bankCount+' financial institutions visiting your site.</div>';
+  ihtml+='<div><strong>New This Period:</strong> '+newCount+' companies visiting for the first time.</div>';
+  if(highQuality>0)ihtml+='<div><strong>High Quality:</strong> '+highQuality+' companies scored 8+ by Leadfeeder \u2014 strong engagement signals.</div>';
+  ihtml+='</div></div>';
+  document.getElementById("co-insights").innerHTML=ihtml;
 }
 
 // ── HISTORICAL FETCH ──
@@ -975,7 +1140,7 @@ document.querySelectorAll("#tabs-bar .tab").forEach(btn=>{
     document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
     btn.classList.add("active");
     currentTab=btn.dataset.tab;
-    ["overview","content","insights","engagement","historical","leaderboard"].forEach(t=>{
+    ["overview","content","insights","engagement","historical","leaderboard","companies"].forEach(t=>{
       document.getElementById("tab-"+t).classList.toggle("hidden",t!==currentTab);
     });
     // Auto-load historical data when tab is opened for the first time
@@ -984,6 +1149,12 @@ document.querySelectorAll("#tabs-bar .tab").forEach(btn=>{
     }
     if(currentTab==="leaderboard" && histData){
       renderLeaderboard();
+    }
+    if(currentTab==="companies" && !companiesData){
+      setTimeout(fetchCompanies,100);
+    }
+    if(currentTab==="companies" && companiesData){
+      renderCompaniesTable();
     }
   });
 });
@@ -1105,7 +1276,7 @@ async function exportPDF(){
       pdf.setFillColor(0,45,114);
       pdf.rect(0,0,pw,18,"F");
       pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);
-      pdf.text("CommandBar Analytics v1.8.1",margin,12);
+      pdf.text("CommandBar Analytics v2.0",margin,12);
       pdf.setFont("helvetica","normal");pdf.setFontSize(9);
       pdf.text((PERIOD?PERIOD+" \u00b7 ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});
       pdf.setFillColor(9,96,187);
@@ -1116,7 +1287,7 @@ async function exportPDF(){
     }
     function drawFooter(n){
       pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);
-      pdf.text("CommandBar Analytics Dashboard v1.8.1 \u00b7 SiteImprove Events",margin,ph-5);
+      pdf.text("CommandBar Analytics Dashboard v2.0 \u00b7 SiteImprove Events",margin,ph-5);
       pdf.text("Page "+n,pw-margin,ph-5,{align:"right"});
     }
 
@@ -1245,8 +1416,8 @@ async function exportPDF(){
     }
 
     // ── Capture tabs ──
-    const tabs=["overview","content","insights","engagement","historical","leaderboard"];
-    const tabNames=["Overview","Content","Performance","Activity","Compare","Trending"];
+    const tabs=["overview","content","insights","engagement","historical","leaderboard","companies"];
+    const tabNames=["Overview","Content","Performance","Activity","Compare","Trending","Companies"];
     const savedTab=currentTab;
 
     for(let i=0;i<tabs.length;i++){
@@ -1279,7 +1450,7 @@ async function exportPDF(){
   }catch(err){
     console.error("PDF export error:",err);
     document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>PDF export failed: '+err.message+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
-    ["overview","content","insights","engagement","historical","leaderboard"].forEach(t=>{
+    ["overview","content","insights","engagement","historical","leaderboard","companies"].forEach(t=>{
       const el=document.getElementById("tab-"+t);el.style.display="";
       el.classList.toggle("hidden",t!==currentTab);
     });
