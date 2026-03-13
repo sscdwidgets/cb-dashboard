@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CommandBar Analytics Dashboard v2.0</title>
+<title>CommandBar Analytics Dashboard v2.0.1</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -137,7 +137,7 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div id="tab-leaderboard" class="hidden"></div>
   <div id="tab-companies" class="hidden"></div>
 
-  <div class="footer" id="footer">CommandBar Analytics Dashboard v2.0 · Powered by SiteImprove Events · SouthState Correspondent</div>
+  <div class="footer" id="footer">CommandBar Analytics Dashboard v2.0.1 · Powered by SiteImprove Events · SouthState Correspondent</div>
 </div>
 
 <script>
@@ -548,7 +548,7 @@ function render(){
 
   // ── COMPANIES TAB ──
   var chtml='<div class="charts"><div class="chart-card" style="flex:1 1 100%">';
-  chtml+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">';
+  chtml+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">';
   chtml+='<div class="chart-title" style="margin-bottom:0">Visitor Companies</div>';
   chtml+='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">';
   chtml+='<label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#8A9099;cursor:pointer"><input type="checkbox" id="co-filter-banking" checked onchange="renderCompaniesTable()"> Banking & Finance only</label>';
@@ -557,6 +557,10 @@ function render(){
   chtml+='<option value="quality">Quality Score</option><option value="last_visit">Last Visit</option><option value="name">Name</option><option value="employees">Employees</option></select>';
   chtml+='<button class="import-btn" id="co-fetch-btn" onclick="fetchCompanies()" style="background:#2E7D32;padding:5px 12px;font-size:11px">Load Companies</button>';
   chtml+='</div></div>';
+  chtml+='<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">';
+  chtml+='<input type="text" id="co-search-name" placeholder="Search company name..." oninput="renderCompaniesTable()" style="padding:6px 10px;border-radius:8px;border:1px solid #E8ECF0;font-size:12px;font-family:inherit;flex:1;min-width:160px">';
+  chtml+='<input type="text" id="co-search-state" placeholder="Filter by state..." oninput="renderCompaniesTable()" style="padding:6px 10px;border-radius:8px;border:1px solid #E8ECF0;font-size:12px;font-family:inherit;width:140px">';
+  chtml+='</div>';
   chtml+='<div id="co-status" style="font-size:11px;color:#8A9099;margin-bottom:8px"></div>';
   chtml+='<div id="co-table"></div>';
   chtml+='</div></div>';
@@ -619,13 +623,17 @@ function renderCompaniesTable(){
   var bankingOnly=document.getElementById("co-filter-banking");
   var hideInternal=document.getElementById("co-filter-internal");
   var sortBy=(document.getElementById("co-sort")||{}).value||"quality";
+  var nameSearch=((document.getElementById("co-search-name")||{}).value||"").toLowerCase().trim();
+  var stateSearch=((document.getElementById("co-search-state")||{}).value||"").toLowerCase().trim();
 
   var filtered=companiesData.filter(function(c){
     if(hideInternal&&hideInternal.checked&&INTERNAL_NAMES.some(function(n){return c.name.indexOf(n)>-1}))return false;
     if(bankingOnly&&bankingOnly.checked){
       var ind=(c.industry||"").toLowerCase();
-      return ind.indexOf("bank")>-1||ind.indexOf("financial")>-1||ind.indexOf("credit")>-1||ind.indexOf("investment")>-1;
+      if(!(ind.indexOf("bank")>-1||ind.indexOf("financial")>-1||ind.indexOf("credit")>-1||ind.indexOf("investment")>-1))return false;
     }
+    if(nameSearch&&(c.name||"").toLowerCase().indexOf(nameSearch)===-1)return false;
+    if(stateSearch&&(c.state||"").toLowerCase().indexOf(stateSearch)===-1)return false;
     return true;
   });
 
@@ -643,7 +651,6 @@ function renderCompaniesTable(){
     return;
   }
 
-  // Determine if company is new (first visit within the date range)
   var fromEl=document.getElementById("date-from");
   var startDate=fromEl&&fromEl.value?fromEl.value:"";
 
@@ -654,9 +661,9 @@ function renderCompaniesTable(){
   html+='<th style="text-align:center;padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase">Industry</th>';
   html+='<th style="text-align:center;padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase">Size</th>';
   html+='<th style="text-align:center;padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase">Quality</th>';
-  html+='<th style="text-align:center;padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase">First Visit</th>';
   html+='<th style="text-align:center;padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase">Last Visit</th>';
   html+='<th style="text-align:center;padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase">Status</th>';
+  html+='<th style="text-align:center;padding:10px 8px;font-size:10px;font-weight:600;color:#8A9099;letter-spacing:.5px;text-transform:uppercase;width:50px">Pages</th>';
   html+='</tr></thead><tbody>';
 
   filtered.forEach(function(c,i){
@@ -665,6 +672,8 @@ function renderCompaniesTable(){
     var qBg=c.quality>=8?"#2E7D3214":c.quality>=5?"#0960BB14":c.quality>=3?"#FFBF3F14":"#F5F7FA";
     var empLabel=c.employee_count?c.employee_count>=10001?"10k+":c.employee_count>=1000?Math.round(c.employee_count/1000)+"k":String(c.employee_count):"\u2013";
     var indColor=((c.industry||"").toLowerCase().indexOf("bank")>-1||(c.industry||"").toLowerCase().indexOf("financial")>-1)?"#0960BB":"#8A9099";
+    var rowId="co-row-"+i;
+    var pagesId="co-pages-"+i;
 
     html+='<tr style="border-bottom:1px solid #F0F2F5;'+(i%2===1?"background:#FAFBFC;":"")+'">';
     // Logo
@@ -675,23 +684,26 @@ function renderCompaniesTable(){
     // Name + website
     html+='<td style="padding:8px"><div style="font-weight:600;color:#1A1A2E">'+c.name+'</div>';
     if(c.website_url)html+='<div style="font-size:10px;color:#8A9099;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px"><a href="'+c.website_url+'" target="_blank" style="color:#8A9099;text-decoration:none">'+c.website_url.replace(/^https?:\/\//,"").replace(/\/+$/,"")+'</a></div>';
-    if(isNew)html+='<span style="display:inline-block;margin-top:2px;font-size:9px;font-weight:600;padding:1px 6px;border-radius:6px;background:#2E7D3214;color:#2E7D32">NEW</span>';
+    if(c.state)html+='<span style="font-size:9px;color:#8A9099">'+c.state+(c.city?", "+c.city:"")+'</span>';
+    if(isNew)html+=' <span style="display:inline-block;margin-top:2px;font-size:9px;font-weight:600;padding:1px 6px;border-radius:6px;background:#2E7D3214;color:#2E7D32">NEW</span>';
     html+='</td>';
     // Industry
-    html+='<td style="text-align:center;padding:8px"><span style="font-size:10px;font-weight:500;color:'+indColor+'">'+( c.industry||"\u2013")+'</span></td>';
+    html+='<td style="text-align:center;padding:8px"><span style="font-size:10px;font-weight:500;color:'+indColor+'">'+(c.industry||"\u2013")+'</span></td>';
     // Size
     html+='<td style="text-align:center;padding:8px;font-size:11px;color:#1A1A2E">'+empLabel+'</td>';
     // Quality
     html+='<td style="text-align:center;padding:8px"><span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;font-size:12px;font-weight:700;background:'+qBg+';color:'+qColor+'">'+c.quality+'</span></td>';
-    // First visit
-    html+='<td style="text-align:center;padding:8px;font-size:11px;color:#8A9099">'+( c.first_visit_date||"\u2013")+'</td>';
     // Last visit
-    html+='<td style="text-align:center;padding:8px;font-size:11px;color:#1A1A2E">'+( c.last_visit_date||"\u2013")+'</td>';
+    html+='<td style="text-align:center;padding:8px;font-size:11px;color:#1A1A2E">'+(c.last_visit_date||"\u2013")+'</td>';
     // Status
     var stColor=c.status==="handled"?"#0960BB":c.status==="new"?"#2E7D32":"#8A9099";
     var stBg=c.status==="handled"?"#0960BB14":c.status==="new"?"#2E7D3214":"#F5F7FA";
-    html+='<td style="text-align:center;padding:8px"><span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:8px;background:'+stBg+';color:'+stColor+'">'+( c.status||"\u2013")+'</span></td>';
+    html+='<td style="text-align:center;padding:8px"><span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:8px;background:'+stBg+';color:'+stColor+'">'+(c.status||"\u2013")+'</span></td>';
+    // Pages expand button
+    html+='<td style="text-align:center;padding:8px"><button onclick="toggleCompanyPages(\''+c.id+'\',\''+pagesId+'\')" style="padding:3px 8px;border-radius:6px;border:1px solid #E8ECF0;background:#fff;font-size:10px;cursor:pointer;color:#0960BB;font-weight:600">\u25BC</button></td>';
     html+='</tr>';
+    // Expandable pages row (hidden by default)
+    html+='<tr id="'+pagesId+'" style="display:none"><td colspan="8" style="padding:0 8px 12px 48px;background:#F8F9FC"><div id="'+pagesId+'-content" style="padding:8px 0;font-size:11px;color:#8A9099">Loading pages...</div></td></tr>';
   });
 
   html+='</tbody></table>';
@@ -709,6 +721,91 @@ function renderCompaniesTable(){
   if(highQuality>0)ihtml+='<div><strong>High Quality:</strong> '+highQuality+' companies scored 8+ by Leadfeeder \u2014 strong engagement signals.</div>';
   ihtml+='</div></div>';
   document.getElementById("co-insights").innerHTML=ihtml;
+}
+
+var companyPagesCache={};
+
+async function toggleCompanyPages(leadId,rowId){
+  var row=document.getElementById(rowId);
+  if(!row)return;
+
+  // Toggle visibility
+  if(row.style.display!=="none"){
+    row.style.display="none";
+    return;
+  }
+  row.style.display="";
+
+  var contentEl=document.getElementById(rowId+"-content");
+  if(!contentEl)return;
+
+  // Check cache
+  if(companyPagesCache[leadId]){
+    renderCompanyPages(contentEl,companyPagesCache[leadId]);
+    return;
+  }
+
+  contentEl.innerHTML='<span style="color:#8A9099">Loading visited pages...</span>';
+
+  try{
+    var fromEl=document.getElementById("date-from");
+    var toEl=document.getElementById("date-to");
+    var startDate=fromEl&&fromEl.value?fromEl.value:defaultDateStr(-6);
+    var endDate=toEl&&toEl.value?toEl.value:defaultDateStr(0);
+
+    var resp=await fetch(LF_URL+"/leads/"+leadId+"/visits?start_date="+startDate+"&end_date="+endDate);
+    var result=await resp.json();
+
+    if(result.error){
+      contentEl.innerHTML='<span style="color:#E53935">Error: '+result.error+'</span>';
+      return;
+    }
+
+    companyPagesCache[leadId]=result.data||[];
+    renderCompanyPages(contentEl,result.data||[]);
+  }catch(err){
+    contentEl.innerHTML='<span style="color:#E53935">Failed to load: '+err.message+'</span>';
+  }
+}
+
+function renderCompanyPages(el,visits){
+  if(!visits||visits.length===0){
+    el.innerHTML='<span style="color:#8A9099">No visit details available for this period.</span>';
+    return;
+  }
+
+  var html='<div style="margin-bottom:4px;font-size:10px;font-weight:600;color:#002D72;text-transform:uppercase;letter-spacing:.5px">'+visits.length+' Visit'+(visits.length>1?"s":"")+'</div>';
+
+  visits.forEach(function(v,vi){
+    var route=v.visit_route||[];
+    var timeStr=v.date+(v.hour!=null?" at "+String(v.hour).padStart(2,"0")+":00":"");
+    var lengthStr=v.visit_length>0?Math.floor(v.visit_length/60)+"m "+( v.visit_length%60)+"s":"< 1s";
+    var srcStr=(v.source||"direct")+(v.medium?" / "+v.medium:"");
+
+    html+='<div style="padding:8px 0;'+(vi<visits.length-1?"border-bottom:1px solid #E8ECF0;":"")+'">';
+    html+='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px">';
+    html+='<span style="font-size:11px;font-weight:600;color:#1A1A2E">'+timeStr+'</span>';
+    html+='<span style="font-size:10px;color:#8A9099">'+lengthStr+' \u00b7 '+route.length+' page'+(route.length!==1?"s":"")+'</span>';
+    html+='<span style="font-size:10px;color:#8A9099">via '+srcStr+'</span>';
+    if(v.device_type)html+='<span style="font-size:10px;color:#8A9099">\u00b7 '+v.device_type+'</span>';
+    html+='</div>';
+
+    if(route.length>0){
+      html+='<div style="margin-left:8px;border-left:2px solid #E8ECF0;padding-left:10px">';
+      route.forEach(function(p,pi){
+        var topStr=p.time_on_page>0?Math.floor(p.time_on_page/60)+"m "+(p.time_on_page%60)+"s":"< 1s";
+        html+='<div style="display:flex;align-items:center;gap:8px;padding:3px 0">';
+        html+='<span style="width:6px;height:6px;border-radius:50%;background:'+(pi===0?"#0960BB":"#D0D5DD")+';flex-shrink:0"></span>';
+        html+='<span style="font-size:11px;color:#1A1A2E;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(p.page_title||p.page_path)+'</span>';
+        html+='<span style="font-size:10px;color:#8A9099;flex-shrink:0">'+topStr+'</span>';
+        html+='</div>';
+      });
+      html+='</div>';
+    }
+    html+='</div>';
+  });
+
+  el.innerHTML=html;
 }
 
 // ── HISTORICAL FETCH ──
@@ -1276,7 +1373,7 @@ async function exportPDF(){
       pdf.setFillColor(0,45,114);
       pdf.rect(0,0,pw,18,"F");
       pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);
-      pdf.text("CommandBar Analytics v2.0",margin,12);
+      pdf.text("CommandBar Analytics v2.0.1",margin,12);
       pdf.setFont("helvetica","normal");pdf.setFontSize(9);
       pdf.text((PERIOD?PERIOD+" \u00b7 ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});
       pdf.setFillColor(9,96,187);
@@ -1287,7 +1384,7 @@ async function exportPDF(){
     }
     function drawFooter(n){
       pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);
-      pdf.text("CommandBar Analytics Dashboard v2.0 \u00b7 SiteImprove Events",margin,ph-5);
+      pdf.text("CommandBar Analytics Dashboard v2.0.1 \u00b7 SiteImprove Events",margin,ph-5);
       pdf.text("Page "+n,pw-margin,ph-5,{align:"right"});
     }
 
