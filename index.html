@@ -87,13 +87,24 @@ tbody tr:nth-child(even){background:#FAFBFC}
 .footer{text-align:center;font-size:10px;color:#8A9099;padding:16px 0 12px;margin-top:8px}
 .hidden{display:none}
 
-/* ── Feed selector ── */
-.feed-selector{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:10px 14px;background:#F0F4FA;border-radius:10px;margin-bottom:14px;border:1px solid #E0E8F4}
-.feed-selector-label{font-size:10px;font-weight:700;color:#8A9099;letter-spacing:.6px;text-transform:uppercase;margin-right:4px;flex-shrink:0}
-.feed-pill{padding:5px 14px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1.5px solid #E8ECF0;background:#fff;color:#8A9099;letter-spacing:.1px;transition:all .15s;white-space:nowrap}
-.feed-pill:hover{border-color:#0960BB;color:#0960BB;background:#0960BB08}
-.feed-pill.active{border-color:#002D72;background:#002D72;color:#fff}
-.feed-pill-loading{opacity:.5;pointer-events:none}
+/* ── Feed sidebar ── */
+.feed-sidebar-wrap{display:flex;gap:0;overflow:hidden}
+.feed-sidebar{width:160px;flex-shrink:0;border-right:1px solid #E8ECF0;display:flex;flex-direction:column;transition:width .2s ease,opacity .2s ease}
+.feed-sidebar.collapsed{width:0;overflow:hidden;border-right:none;opacity:0;pointer-events:none}
+.feed-sidebar-header{display:flex;align-items:center;justify-content:space-between;padding:8px 10px 6px;border-bottom:1px solid #E8ECF0;flex-shrink:0}
+.feed-sidebar-label{font-size:9px;font-weight:700;color:#8A9099;letter-spacing:.7px;text-transform:uppercase}
+.feed-sidebar-search{padding:6px 10px;border-bottom:1px solid #E8ECF0;flex-shrink:0}
+.feed-sidebar-search input{width:100%;padding:4px 7px;border-radius:6px;border:1px solid #E8ECF0;font-size:11px;font-family:inherit;color:#1A1A2E;outline:none}
+.feed-sidebar-search input:focus{border-color:#0960BB}
+.feed-sidebar-list{overflow-y:auto;flex:1;max-height:520px}
+.feed-sidebar-item{display:flex;align-items:center;padding:7px 12px;cursor:pointer;border-bottom:1px solid #F5F7FA;transition:background .12s;border-left:3px solid transparent;white-space:nowrap}
+.feed-sidebar-item:hover{background:#F5F7FA}
+.feed-sidebar-item.active{background:#002D720D;border-left-color:#002D72}
+.feed-sidebar-item.active .fsn{color:#002D72;font-weight:700}
+.fsn{font-size:11px;font-weight:500;color:#1A1A2E;overflow:hidden;text-overflow:ellipsis}
+.feed-toggle-btn{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:6px;border:1px solid #E8ECF0;background:#fff;font-size:11px;font-weight:600;color:#8A9099;cursor:pointer;transition:all .15s;flex-shrink:0}
+.feed-toggle-btn:hover{border-color:#0960BB;color:#0960BB}
+.feed-toggle-btn.open{border-color:#002D72;color:#002D72;background:#002D720A}
 </style>
 </head>
 <body>
@@ -205,51 +216,84 @@ async function fetchLfFeeds(){
     // Falls back to static list — that's fine
     lfFeedsLoaded = true;
   }
-  // Re-render feed selectors if tabs are visible
-  renderFeedSelector("co-feed-selector", "companies");
-  renderFeedSelector("map-feed-selector", "map");
+  // Re-render sidebars if tabs are visible
+  renderFeedSidebars();
 }
 
 // Build the HTML for a feed selector pill row
-function feedSelectorHTML(domId, tabKey){
-  var html = '<div class="feed-selector" id="'+domId+'">';
-  html += '<span class="feed-selector-label">Feed</span>';
-  // "All" pill
-  var allActive = (currentLfFeed === null);
-  html += '<button class="feed-pill'+(allActive?' active':'')+'" onclick="setLfFeed(null,\''+tabKey+'\')">All</button>';
-  lfFeeds.forEach(function(f){
-    var isActive = (currentLfFeed === f.id);
-    var label = f.name + (f.lead_count !== undefined ? ' ('+f.lead_count+')' : '');
-    html += '<button class="feed-pill'+(isActive?' active':'')+'" onclick="setLfFeed(\''+f.id+'\',\''+tabKey+'\')">'+label+'</button>';
-  });
+// Feed sidebar open/closed state (open by default)
+var feedSidebarOpen = true;
+
+function feedSidebarHTML(domId){
+  var collapsed = feedSidebarOpen ? '' : ' collapsed';
+  var html = '<div class="feed-sidebar'+collapsed+'" id="'+domId+'">';
+  html += '<div class="feed-sidebar-header">';
+  html += '<span class="feed-sidebar-label">Feeds</span>';
   html += '</div>';
+  html += '<div class="feed-sidebar-search"><input type="text" placeholder="Search..." oninput="filterFeedSidebar(this.value,\''+domId+'\')" id="'+domId+'-search"></div>';
+  html += '<div class="feed-sidebar-list" id="'+domId+'-list">';
+  html += feedSidebarItems();
+  html += '</div></div>';
   return html;
 }
 
-// Re-render just the feed selector bar in place (without full tab re-render)
-function renderFeedSelector(domId, tabKey){
-  var el = document.getElementById(domId);
-  if(!el) return;
-  el.outerHTML = feedSelectorHTML(domId, tabKey);
+function feedSidebarItems(filter){
+  filter = (filter||'').toLowerCase();
+  var items = '';
+  var allActive = (currentLfFeed === null);
+  items += '<div class="feed-sidebar-item'+(allActive?' active':'')+'" onclick="setLfFeed(null)">';
+  items += '<span class="fsn">All feeds</span>';
+  items += '</div>';
+  lfFeeds.filter(function(f){return !filter||f.name.toLowerCase().indexOf(filter)>-1}).forEach(function(f){
+    var isActive = (currentLfFeed === f.id);
+    items += '<div class="feed-sidebar-item'+(isActive?' active':'')+'" onclick="setLfFeed(\''+f.id+'\')">';
+    items += '<span class="fsn">'+f.name+'</span>';
+    items += '</div>';
+  });
+  return items;
 }
 
-// Called when a feed pill is clicked
-function setLfFeed(feedId, tabKey){
-  currentLfFeed = feedId;
-  companiesData = null; // force re-fetch
+function filterFeedSidebar(val, domId){
+  var list = document.getElementById(domId+'-list');
+  if(list) list.innerHTML = feedSidebarItems(val);
+}
+
+function toggleFeedSidebar(){
+  feedSidebarOpen = !feedSidebarOpen;
+  ['co-feed-sidebar','map-feed-sidebar'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.classList.toggle('collapsed', !feedSidebarOpen);
+  });
+  // Update toggle button labels
+  document.querySelectorAll('.feed-toggle-btn').forEach(function(btn){
+    btn.classList.toggle('open', feedSidebarOpen);
+    btn.innerHTML = feedSidebarOpen
+      ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg> Feeds'
+      : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg> Feeds';
+  });
+}
+
+function renderFeedSidebars(){
+  ['co-feed-sidebar','map-feed-sidebar'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(!el) return;
+    var searchEl = document.getElementById(id+'-search');
+    var searchVal = searchEl ? searchEl.value : '';
+    el.outerHTML = feedSidebarHTML(id);
+    var newSearch = document.getElementById(id+'-search');
+    if(newSearch && searchVal) newSearch.value = searchVal;
+  });
+}
+
+function setLfFeed(feedId){
+  currentLfFeed = feedId || null;
+  companiesData = null;
   mapStateData = null;
   companyPagesCache = {};
-
-  // Re-render the feed selectors in both tabs immediately (pill state update)
-  renderFeedSelector("co-feed-selector", "companies");
-  renderFeedSelector("map-feed-selector", "map");
-
-  // Trigger the appropriate tab's data load
-  if(tabKey === "companies"){
-    fetchCompanies();
-  } else if(tabKey === "map"){
-    fetchMapData();
-  }
+  renderFeedSidebars();
+  if(currentTab === 'companies') fetchCompanies();
+  else if(currentTab === 'map') fetchMapData();
+  else fetchCompanies();
 }
 
 // ── PARSE ──
@@ -605,12 +649,14 @@ function render(){
 
 // ── COMPANIES TAB RENDER ──
 function renderCompaniesTab(){
-  var chtml = feedSelectorHTML("co-feed-selector", "companies");
-  chtml+='<div class="charts"><div class="chart-card" style="flex:1 1 100%">';
+  // Sidebar + main content side-by-side
+  var chtml='<div style="display:flex;gap:0;border-radius:12px;border:1px solid #E8ECF0;background:#fff;box-shadow:0 1px 3px rgba(0,45,114,.04);margin-bottom:16px;overflow:hidden">';
+  chtml+=feedSidebarHTML("co-feed-sidebar");
+  chtml+='<div style="flex:1;min-width:0;padding:16px 18px">';
   chtml+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">';
-  chtml+='<div class="chart-title" style="margin-bottom:0">Visitor Companies</div>';
+  chtml+='<div style="display:flex;align-items:center;gap:8px"><div class="chart-title" style="margin-bottom:0">Visitor Companies</div>'+'<button class="feed-toggle-btn open" onclick="toggleFeedSidebar()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg> Feeds</button>'+'</div>';
   chtml+='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">';
-  chtml+='<label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#8A9099;cursor:pointer"><input type="checkbox" id="co-filter-banking" checked onchange="renderCompaniesTable()"> Banking & Finance only</label>';
+  chtml+='<label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#8A9099;cursor:pointer"><input type="checkbox" id="co-filter-banking" checked onchange="renderCompaniesTable()"> Banking &amp; Finance only</label>';
   chtml+='<label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#8A9099;cursor:pointer"><input type="checkbox" id="co-filter-internal" checked onchange="renderCompaniesTable()"> Hide internal</label>';
   chtml+='<select id="co-sort" onchange="renderCompaniesTable()" style="padding:4px 8px;border-radius:6px;border:1px solid #E8ECF0;font-size:11px;font-family:inherit">';
   chtml+='<option value="quality">Quality Score</option><option value="last_visit">Last Visit</option><option value="name">Name</option><option value="employees">Employees</option></select>';
@@ -630,10 +676,11 @@ function renderCompaniesTab(){
 
 // ── MAP TAB RENDER ──
 function renderMapTab(){
-  var mhtml = feedSelectorHTML("map-feed-selector", "map");
-  mhtml+='<div class="charts"><div class="chart-card" style="flex:1 1 100%">';
+  var mhtml='<div style="display:flex;gap:0;border-radius:12px;border:1px solid #E8ECF0;background:#fff;box-shadow:0 1px 3px rgba(0,45,114,.04);margin-bottom:16px;overflow:hidden">';
+  mhtml+=feedSidebarHTML("map-feed-sidebar");
+  mhtml+='<div style="flex:1;min-width:0;padding:16px 18px">';
   mhtml+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">';
-  mhtml+='<div id="map-breadcrumb"><span class="chart-title" style="margin-bottom:0">Bank Visitor Map</span></div>';
+  mhtml+='<div style="display:flex;align-items:center;gap:8px"><div id="map-breadcrumb"><span class="chart-title" style="margin-bottom:0">Bank Visitor Map</span></div>'+'<button class="feed-toggle-btn open" onclick="toggleFeedSidebar()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg> Feeds</button>'+'</div>';
   mhtml+='<div style="display:flex;gap:6px;align-items:center">';
   mhtml+='<button id="map-back-btn" onclick="mapGoBack()" style="display:none;padding:4px 12px;border-radius:6px;border:1px solid #E8ECF0;background:#fff;font-size:11px;cursor:pointer;color:#0960BB;font-weight:600">\u2190 Back</button>';
   mhtml+='<button class="import-btn" onclick="fetchMapData()" style="background:#2E7D32;padding:5px 12px;font-size:11px">Load Map Data</button>';
