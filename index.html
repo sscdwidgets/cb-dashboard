@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CommandBar Analytics Dashboard v2.5.3</title>
+<title>CommandBar Analytics Dashboard v2.5.4</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -116,7 +116,7 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div class="header">
     <div class="header-left">
       <div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
-      <div style="position:relative;display:inline-block"><div class="title">CommandBar Analytics<span style="margin-left:10px;font-size:11px;font-weight:300;letter-spacing:.5px;color:rgba(255,255,255,0.35);vertical-align:middle">v2.5.3</span></div><div class="subtitle" id="period-label">SouthState Correspondent</div></div>
+      <div style="position:relative;display:inline-block"><div class="title">CommandBar Analytics<span style="margin-left:10px;font-size:11px;font-weight:300;letter-spacing:.5px;color:rgba(255,255,255,0.35);vertical-align:middle">v2.5.4</span></div><div class="subtitle" id="period-label">SouthState Correspondent</div></div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <div style="display:flex;gap:4px;align-items:center">
@@ -166,7 +166,7 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div id="tab-map" class="hidden"></div>
   <div id="tab-contacts" class="hidden"></div>
 
-  <div class="footer" id="footer">CommandBar Analytics Dashboard v2.5.3 · Powered by SiteImprove Events + Leadfeeder · SouthState Correspondent</div>
+  <div class="footer" id="footer">CommandBar Analytics Dashboard v2.5.4 · Powered by SiteImprove Events + Leadfeeder · SouthState Correspondent</div>
 </div>
 
 <script>
@@ -1575,15 +1575,18 @@ function buildContactsIndex(){
   var source = (RAW_DATA_ALL && RAW_DATA_ALL.length) ? RAW_DATA_ALL : RAW_DATA;
   if(!source || !source.length) return;
 
-  // DEBUG: log first 5 rows with sfc: to inspect structure
+  // DEBUG: log structure
   var sfcRows = source.filter(function(r){return r.label && r.label.indexOf('sfc:') > -1;});
-  console.group('buildContactsIndex — sfc rows found: ' + sfcRows.length + ' of ' + source.length);
+  var cats = {};
+  source.forEach(function(r){cats[r.category||r.action||'?']=(cats[r.category||r.action||'?']||0)+1;});
+  console.group('buildContactsIndex — sfc rows: ' + sfcRows.length + ' / total: ' + source.length);
+  console.log('Categories in source:', JSON.stringify(cats));
   sfcRows.slice(0,5).forEach(function(r){ console.log(JSON.stringify(r)); });
   console.groupEnd();
 
   source.forEach(function(row){
     if(!row.label) return;
-    var sfcMatch = row.label.match(/sfc:([A-Za-z0-9]{15,18})/);
+    var sfcMatch = row.label.match(/sfc:([A-Za-z0-9]{18}|[A-Za-z0-9]{15})(?![A-Za-z0-9])/);
     if(!sfcMatch) return;
     var sfId = sfcMatch[1];
     // Parse action type and page title from label
@@ -1701,8 +1704,8 @@ async function exportPDF(){
   btn.innerHTML="Generating...";btn.style.opacity=".6";btn.style.pointerEvents="none";
   try{
     const {jsPDF}=window.jspdf;const pdf=new jsPDF("l","mm","a4");const pw=pdf.internal.pageSize.getWidth();const ph=pdf.internal.pageSize.getHeight();const margin=12;const contentW=pw-margin*2;const headerH=27;const footerH=8;const availH=ph-headerH-footerH;let pageCount=0;
-    function drawHeader(title,contd){pdf.setFillColor(0,45,114);pdf.rect(0,0,pw,18,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);pdf.text("CommandBar Analytics v2.5.3",margin,12);pdf.setFont("helvetica","normal");pdf.setFontSize(9);pdf.text((PERIOD?PERIOD+" · ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});pdf.setFillColor(9,96,187);pdf.rect(0,18,pw,6,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(8);pdf.setTextColor(255,255,255);pdf.text(title.toUpperCase()+(contd?" (CONTINUED)":""),margin,22.5);pdf.setTextColor(0,0,0);}
-    function drawFooter(n){pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);pdf.text("CommandBar Analytics Dashboard v2.5.3 · SiteImprove Events",margin,ph-5);pdf.text("Page "+n,pw-margin,ph-5,{align:"right"});}
+    function drawHeader(title,contd){pdf.setFillColor(0,45,114);pdf.rect(0,0,pw,18,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);pdf.text("CommandBar Analytics v2.5.4",margin,12);pdf.setFont("helvetica","normal");pdf.setFontSize(9);pdf.text((PERIOD?PERIOD+" · ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});pdf.setFillColor(9,96,187);pdf.rect(0,18,pw,6,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(8);pdf.setTextColor(255,255,255);pdf.text(title.toUpperCase()+(contd?" (CONTINUED)":""),margin,22.5);pdf.setTextColor(0,0,0);}
+    function drawFooter(n){pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);pdf.text("CommandBar Analytics Dashboard v2.5.4 · SiteImprove Events",margin,ph-5);pdf.text("Page "+n,pw-margin,ph-5,{align:"right"});}
     function addPage(title,contd){if(pageCount>0)pdf.addPage();pageCount++;drawHeader(title,contd||false);drawFooter(pageCount);}
     async function captureAndAdd(el,tabName){const canvas=await html2canvas(el,{scale:2,backgroundColor:"#F5F7FA",useCORS:true,logging:false,windowWidth:980});const imgData=canvas.toDataURL("image/jpeg",0.92);const imgW=contentW;const imgH=(canvas.height/canvas.width)*contentW;const finalH=Math.min(imgH,availH);const finalW=imgH>availH?(availH/imgH)*imgW:imgW;const xOff=margin+(contentW-finalW)/2;addPage(tabName);pdf.addImage(imgData,"JPEG",xOff,headerH,finalW,finalH);}
     function drawContentTable(){
