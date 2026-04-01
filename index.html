@@ -1574,8 +1574,13 @@ function buildContactsIndex(){
   contactsIndex = {};
   var source = (RAW_DATA_ALL && RAW_DATA_ALL.length) ? RAW_DATA_ALL : RAW_DATA;
   if(!source || !source.length) return;
-  // Parse sfc: values from SiteImprove event labels across all categories
-  // Label format: "Skim: Page Title | sfc:0033t00003e4CDtAAM"
+
+  // DEBUG: log first 5 rows with sfc: to inspect structure
+  var sfcRows = source.filter(function(r){return r.label && r.label.indexOf('sfc:') > -1;});
+  console.group('buildContactsIndex — sfc rows found: ' + sfcRows.length + ' of ' + source.length);
+  sfcRows.slice(0,5).forEach(function(r){ console.log(JSON.stringify(r)); });
+  console.groupEnd();
+
   source.forEach(function(row){
     if(!row.label) return;
     var sfcMatch = row.label.match(/sfc:([A-Za-z0-9]{15,18})/);
