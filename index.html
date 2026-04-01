@@ -153,6 +153,7 @@ tbody tr:nth-child(even){background:#FAFBFC}
     <button class="tab" data-tab="companies">Companies</button>
     <button class="tab" data-tab="map">Map</button>
     <button class="tab" data-tab="contacts">Contacts</button>
+    <button class="tab" data-tab="art">Acq Risk Tool</button>
   </div>
 
   <!-- Tab Panels -->
@@ -165,6 +166,7 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div id="tab-companies" class="hidden"></div>
   <div id="tab-map" class="hidden"></div>
   <div id="tab-contacts" class="hidden"></div>
+  <div id="tab-art" class="hidden"></div>
 
   <div class="footer" id="footer">CommandBar Analytics Dashboard v2.5.4 · Powered by SiteImprove Events + Leadfeeder · SouthState Correspondent</div>
 </div>
@@ -205,11 +207,10 @@ var LF_FEEDS_STATIC = [
   {id:"3409ff36-15ce-11ed-ade3-47b1039f35fa", name:"ON FIRE"},
 ];
 
-var lfFeeds = LF_FEEDS_STATIC.slice(); // will be updated from API on first load
-var currentLfFeed = null; // null = all / no feed filter
+var lfFeeds = LF_FEEDS_STATIC.slice();
+var currentLfFeed = null;
 var lfFeedsLoaded = false;
 
-// Fetch live feed list from Worker
 async function fetchLfFeeds(){
   if(lfFeedsLoaded)return;
   try{
@@ -222,15 +223,11 @@ async function fetchLfFeeds(){
     }
     lfFeedsLoaded = true;
   }catch(e){
-    // Falls back to static list — that's fine
     lfFeedsLoaded = true;
   }
-  // Re-render sidebars if tabs are visible
   renderFeedSidebars();
 }
 
-// Build the HTML for a feed selector pill row
-// Feed sidebar open/closed state (open by default)
 var feedSidebarOpen = true;
 
 function feedSidebarHTML(domId){
@@ -273,7 +270,6 @@ function toggleFeedSidebar(){
     var el = document.getElementById(id);
     if(el) el.classList.toggle('collapsed', !feedSidebarOpen);
   });
-  // Update toggle button labels
   document.querySelectorAll('.feed-toggle-btn').forEach(function(btn){
     btn.classList.toggle('open', feedSidebarOpen);
     btn.innerHTML = feedSidebarOpen
@@ -318,7 +314,6 @@ function parseCSV(text){
   for(const line of lines.slice(headerIdx+1).filter(l=>l.trim())){
     const p=line.split("\t").map(s=>s.replace(/^"|"$/g,"").trim());
     if(p.length<6)continue;
-    // Keep all rows that have sfc: in label, plus all CommandBar rows
     const row={category:p[0],action:p[1],label:p[2],events:parseInt(p[3],10)||0,visits:parseInt(p[5],10)||0};
     allRows.push(row);
     if(p[0]==="CommandBar") results.push(row);
@@ -393,7 +388,7 @@ function process(R){
   return{dailyVisits,dailyVisitors,railOpens,nudgeShown,nudgeDismiss,clickTotal,clicks,saveTotal,saves,shareTotal,shares,actionsTotal,actionBreakdown,actionDetail,articles,totalContent,totalEngaged,totalSkim,totalBounce,myStuff,signup};
 }
 
-// ── OVERVIEW RENDER (called from render() and after companiesData loads) ──
+// ── OVERVIEW RENDER ──
 function renderOverview(d){
   if(!d) return;
   const deepPct=d.totalContent?Math.round(d.totalEngaged/d.totalContent*100):0;
@@ -401,7 +396,6 @@ function renderOverview(d){
   const blogs=d.articles.filter(function(a){return a.type==="Blog";});
   const pods=d.articles.filter(function(a){return a.type==="Podcast";});
 
-  // ── Leadfeeder: new vs returning + top companies ──
   var lfNew=0,lfReturning=0;
   var fromVal=document.getElementById("date-from")&&document.getElementById("date-from").value;
   var lfLoading=!companiesData;
@@ -413,19 +407,14 @@ function renderOverview(d){
       if(fromVal&&c.first_visit_date&&c.first_visit_date>=fromVal) lfNew++;
       else lfReturning++;
     });
-
   }
 
-  // ── Stat cards: Daily Visitors + New vs Returning ──
   var html='<div class="cards">';
   html+=card("Daily Visitors",d.dailyVisits,d.dailyVisitors+" unique sessions");
   html+=card("New Companies",lfLoading?"—":lfNew,(lfLoading?"Loading...":lfReturning+" returning this period"),CL.gold);
   html+='</div>';
 
-  // ── Charts row ──
   html+='<div class="charts">';
-
-  // Top 5 Content
   html+='<div class="chart-card" style="flex:1 1 300px"><div class="chart-title">Top Content This Period</div>';
   if(top5.length){
     top5.forEach(function(a){
@@ -438,10 +427,8 @@ function renderOverview(d){
   }
   html+='</div>';
 
-  // Content by Type donut
   html+='<div class="chart-card" style="flex:1 1 180px"><div class="chart-title">Content by Type</div><div class="chart-wrap" style="height:170px"><canvas id="c-type-ov"></canvas></div></div>';
 
-  // Top States by visitor count
   var stateCounts={};
   if(!lfLoading&&companiesData){
     companiesData.filter(function(c){
@@ -465,12 +452,10 @@ function renderOverview(d){
     html+='<div style="font-size:12px;color:#8A9099;padding:12px 0">No location data this period</div>';
   }
   html+='</div>';
-
-  html+='</div>'; // end charts row
+  html+='</div>';
 
   document.getElementById("tab-overview").innerHTML=html;
 
-  // Draw Content by Type donut
   var blogTotal=blogs.reduce(function(s,a){return s+a.total;},0);
   var pageTotal=d.articles.filter(function(a){return a.type==="Page";}).reduce(function(s,a){return s+a.total;},0);
   var podTotal=pods.reduce(function(s,a){return s+a.total;},0);
@@ -497,7 +482,6 @@ function render(){
 
   document.getElementById("period-label").textContent=(PERIOD?PERIOD+" \u00b7 ":"")+"SouthState Correspondent";
 
-  // ── OVERVIEW ──
   renderOverview(d);
 
   // ── ENGAGEMENT TAB ──
@@ -729,7 +713,7 @@ function render(){
   // ── MAP TAB ──
   renderMapTab();
 
-  // Auto-load background tabs that haven't fetched yet
+  // Auto-load background tabs
   fetchLfFeeds();
   if(!companiesData) setTimeout(fetchCompanies, 400);
   if(!histData) setTimeout(fetchHistorical, 200);
@@ -738,7 +722,6 @@ function render(){
 
 // ── COMPANIES TAB RENDER ──
 function renderCompaniesTab(){
-  // Sidebar + main content side-by-side
   var chtml='<div style="display:flex;gap:0;border-radius:12px;border:1px solid #E8ECF0;background:#fff;box-shadow:0 1px 3px rgba(0,45,114,.04);margin-bottom:16px;overflow:hidden">';
   chtml+=feedSidebarHTML("co-feed-sidebar");
   chtml+='<div style="flex:1;min-width:0;padding:16px 18px">';
@@ -786,7 +769,6 @@ function renderMapTab(){
 var companiesData=null;
 var INTERNAL_NAMES=["SouthState Bank","SouthState Securities","First Federal","SouthState Correspondent"];
 
-// Build the fetch URL — uses feed-scoped endpoint when a feed is selected
 function lfLeadsUrl(page, startDate, endDate){
   var base = currentLfFeed
     ? LF_URL+"/feeds/"+currentLfFeed+"/leads"
@@ -820,13 +802,11 @@ async function fetchCompanies(){
       pg++;
     }
     companiesData=allLeads;
-    // Refresh overview Leadfeeder panels whenever companies finish loading
     if(hasData){var dov=process(RAW_DATA);renderOverview(dov);}
 
     var feedLabel=currentLfFeed?" · "+lfFeedName(currentLfFeed):"";
     if(status)status.innerHTML='<span style="color:#2E7D32">'+allLeads.length+' companies loaded'+feedLabel+'.</span>';
     renderCompaniesTable();
-    // Always rebuild map state data after companies load
     buildMapStateData();
   }catch(err){
     if(status)status.innerHTML='<span style="color:#E53935">Failed: '+err.message+'</span>';
@@ -927,7 +907,6 @@ function renderCompaniesTable(){
     html+='<td style="text-align:center;padding:8px"><span style="font-size:10px;font-weight:500;color:'+indColor+'">'+(c.industry||"\u2013")+'</span></td>';
     html+='<td style="text-align:center;padding:8px"><span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;font-size:12px;font-weight:700;background:'+qBg+';color:'+qColor+'">'+c.quality+'</span></td>';
     html+='<td style="text-align:center;padding:8px;font-size:11px;color:#1A1A2E">'+(c.last_visit_date||"\u2013")+'</td>';
-
     html+='<td style="text-align:center;padding:8px"><button onclick="toggleCompanyPages(\''+c.id+'\',\''+pagesId+'\')" style="padding:3px 8px;border-radius:6px;border:1px solid #E8ECF0;background:#fff;font-size:10px;cursor:pointer;color:#0960BB;font-weight:600">\u25BC</button></td>';
     html+='</tr>';
     html+='<tr id="'+pagesId+'" style="display:none"><td colspan="6" style="padding:0 8px 12px 48px;background:#F8F9FC"><div id="'+pagesId+'-content" style="padding:8px 0;font-size:11px;color:#8A9099">Loading pages...</div></td></tr>';
@@ -961,7 +940,6 @@ async function toggleCompanyPages(leadId,rowId){
   row.style.display="";
   var contentEl=document.getElementById(rowId+"-content");
   if(!contentEl)return;
-  // DEBUG: log raw lead object from companiesData to check for contacts/email fields
   if(companiesData){
     var lead=companiesData.find(function(c){return c.id===leadId;});
     if(lead){
@@ -984,7 +962,6 @@ async function toggleCompanyPages(leadId,rowId){
     if(result.error){contentEl.innerHTML='<span style="color:#E53935">Error: '+result.error+'</span>';return;}
     var visitsData=result.data||[];
     companyPagesCache[leadId]=visitsData;
-    // DEBUG: log raw visit data to console
     console.group("Leadfeeder visits — lead "+leadId);
     console.log("Total visits:", visitsData.length);
     if(visitsData.length>0){
@@ -1003,7 +980,6 @@ function renderCompanyPages(el,visits){
   var html='<div style="margin-bottom:4px;font-size:10px;font-weight:600;color:#002D72;text-transform:uppercase;letter-spacing:.5px">'+visits.length+' Visit'+(visits.length>1?"s":"")+'</div>';
   visits.forEach(function(v,vi){
     var route=v.visit_route||[];
-    // Check if any page in this visit has utm_sfc
     var visitHasContact=route.some(function(p){
       if(!p.page_path) return false;
       var qIdx=p.page_path.indexOf("?");
@@ -1016,7 +992,6 @@ function renderCompanyPages(el,visits){
     var timeStr=v.date+(v.hour!=null?" at "+String(v.hour).padStart(2,"0")+":00":"");
     var lengthStr=v.visit_length>0?Math.floor(v.visit_length/60)+"m "+(v.visit_length%60)+"s":"< 1s";
     var srcStr=(v.source||"direct")+(v.medium?" / "+v.medium:"");
-    // Highlight visit block if contact identified
     var blockStyle="padding:8px 0 8px "+(visitHasContact?"10px":"0")+";";
     blockStyle+=vi<visits.length-1?"border-bottom:1px solid #E8ECF0;":"";
     blockStyle+=visitHasContact?"border-left:3px solid #FFBF3F;margin-left:-2px;background:linear-gradient(to right,#FFBF3F0A,transparent 60%);":"";
@@ -1033,7 +1008,6 @@ function renderCompanyPages(el,visits){
       route.forEach(function(p,pi){
         var topStr=p.time_on_page>0?Math.floor(p.time_on_page/60)+"m "+(p.time_on_page%60)+"s":"< 1s";
         var pageLabel=p.page_title||p.page_path||"";
-        // Strip query params for display; extract utm_sfc
         var utmSfc=null;
         var cleanPath=p.page_path||"";
         if(p.page_path){
@@ -1048,9 +1022,7 @@ function renderCompanyPages(el,visits){
         }
         var cleanUrl=cleanPath?("https://www.southstatecorrespondent.com"+cleanPath):"";
         var pageRowId="pr-"+vi+"-"+pi;
-        // Outer wrapper per page
         html+='<div style="padding:3px 0">';
-        // Main row: dot · title · View Contact · time
         html+='<div style="display:flex;align-items:center;gap:8px">';
         html+='<span style="width:6px;height:6px;border-radius:50%;background:'+(pi===0?"#0960BB":"#D0D5DD")+';flex-shrink:0"></span>';
         html+='<span onclick="var r=document.getElementById(\''+pageRowId+'\');r.style.display=r.style.display===\'none\'?\'block\':\'none\'" style="font-size:11px;color:#1A1A2E;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="Click to see URL">'+pageLabel+'</span>';
@@ -1060,7 +1032,6 @@ function renderCompanyPages(el,visits){
         }
         html+='<span style="font-size:10px;color:#8A9099;flex-shrink:0">'+topStr+'</span>';
         html+='</div>';
-        // Expandable URL row
         if(cleanUrl){
           html+='<div id="'+pageRowId+'" style="display:none;padding:2px 0 2px 22px">';
           html+='<a href="'+cleanUrl+'" target="_blank" rel="noopener" style="font-size:10px;color:#8A9099;text-decoration:none;word-break:break-all">'+cleanUrl+'</a>';
@@ -1476,7 +1447,7 @@ document.querySelectorAll("#tabs-bar .tab").forEach(btn=>{
     document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
     btn.classList.add("active");
     currentTab=btn.dataset.tab;
-    ["overview","content","insights","engagement","historical","leaderboard","companies","map","contacts"].forEach(t=>{
+    ["overview","content","insights","engagement","historical","leaderboard","companies","map","contacts","art"].forEach(t=>{
       document.getElementById("tab-"+t).classList.toggle("hidden",t!==currentTab);
     });
     if((currentTab==="historical"||currentTab==="leaderboard")&&!histData){setTimeout(fetchHistorical,100);}
@@ -1491,6 +1462,10 @@ document.querySelectorAll("#tabs-bar .tab").forEach(btn=>{
     }
     if(currentTab==="contacts"){
       renderContactsTab();
+    }
+    if(currentTab==="art"){
+      renderARTTab();
+      if(!artData) setTimeout(fetchART, 100);
     }
   });
 });
@@ -1516,12 +1491,12 @@ async function fetchAPI(){
     if(!result.data||result.data.length===0){document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>No CommandBar events found for this date range.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";return;}
     RAW_DATA=result.data;
     RAW_DATA_ALL=result.allRows||result.data;
-    // Clear Leadfeeder caches so map/companies re-fetch against new date range
     companiesData=null;
     mapStateData=null;
     mapCurrentView="us";
     companyPagesCache={};
     histData=null;
+    artData=null;
     RAW_DATA_ALL=[];
     const fd=fromEl.value,td=toEl.value;
     const fmtDate=function(d){var p=d.split("-");var m=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];return m[parseInt(p[1],10)-1]+" "+parseInt(p[2],10)+", "+p[0]};
@@ -1544,10 +1519,8 @@ async function fetchAPI(){
   var fmt=function(d){var y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),dd=String(d.getDate()).padStart(2,"0");return y+"-"+m+"-"+dd;};
   document.getElementById("date-from").value=fmt(week);
   document.getElementById("date-to").value=fmt(today);
-  // Mark 7D pill active
   var btns=document.querySelectorAll(".date-quick");
   if(btns[0]) btns[0].classList.add("active");
-  // Auto-fetch on load
   setTimeout(fetchAPI, 300);
 })();
 
@@ -1568,14 +1541,13 @@ document.getElementById("csv-input").addEventListener("change",function(e){
 });
 
 // ── CONTACTS TAB ──
-var contactsIndex = {}; // keyed by utm_sfc id
+var contactsIndex = {};
 
 function buildContactsIndex(){
   contactsIndex = {};
   var source = (RAW_DATA_ALL && RAW_DATA_ALL.length) ? RAW_DATA_ALL : RAW_DATA;
   if(!source || !source.length) return;
 
-  // DEBUG: log structure
   var sfcRows = source.filter(function(r){return r.label && r.label.indexOf('sfc:') > -1;});
   var cats = {};
   source.forEach(function(r){cats[r.category||r.action||'?']=(cats[r.category||r.action||'?']||0)+1;});
@@ -1589,8 +1561,6 @@ function buildContactsIndex(){
     var sfcMatch = row.label.match(/sfc:([A-Za-z0-9]{18}|[A-Za-z0-9]{15})(?![A-Za-z0-9])/);
     if(!sfcMatch) return;
     var sfId = sfcMatch[1];
-    // Parse action type and page title from label
-    // Format: "ActionType: Page Title | sfc:..."  or  "Page Title | sfc:..."
     var labelClean = row.label.replace(/\s*\|\s*sfc:[A-Za-z0-9]+/, "").trim();
     var actionType = row.action || "";
     var category = row.category || "CommandBar";
@@ -1599,7 +1569,6 @@ function buildContactsIndex(){
     }
     var c = contactsIndex[sfId];
     c.totalEvents += (row.events || 0);
-    // Group by page label
     var pageKey = labelClean;
     if(!c.pages[pageKey]){
       c.pages[pageKey] = {label:labelClean, category:category, actions:{}, events:0};
@@ -1614,7 +1583,6 @@ function renderContactsTab(){
   if(!el) return;
 
   var contacts = Object.values(contactsIndex);
-  // Sort by total events desc
   contacts.sort(function(a,b){ return b.totalEvents - a.totalEvents; });
 
   var noData = !RAW_DATA || !RAW_DATA.length;
@@ -1660,7 +1628,6 @@ function renderContactRows(contacts){
     html += '<a href="'+sfUrl+'" target="_blank" rel="noopener" style="font-size:11px;font-weight:600;color:#0960BB;text-decoration:none;padding:3px 10px;border:1px solid #0960BB22;border-radius:6px">View Contact ↗</a>';
     html += '</td></tr>';
 
-    // Expandable pages sub-row
     html += '<tr id="'+pagesId+'" style="display:none;background:'+rowBg+'"><td colspan="4" style="padding:0 12px 12px 32px">';
     html += '<div style="border-left:2px solid #E8ECF0;padding-left:12px;margin-top:4px">';
     pages.sort(function(a,b){return b.events-a.events;}).forEach(function(p){
@@ -1698,46 +1665,224 @@ function filterContacts(val){
   if(list) list.innerHTML = renderContactRows(contacts);
 }
 
+// ── ACQUISITION RISK TOOL TAB ──
+var artData = null;
+var artSortField = "events";
+var artSortDir = "desc";
+var ART_CATEGORY = "Acquisition Risk Tool";
+
+async function fetchART() {
+  var btn = document.getElementById("art-fetch-btn");
+  var status = document.getElementById("art-status");
+  var fromEl = document.getElementById("date-from");
+  var toEl = document.getElementById("date-to");
+  var startDate = fromEl && fromEl.value ? fromEl.value.replace(/-/g,"") : defaultDateStr(-6).replace(/-/g,"");
+  var endDate = toEl && toEl.value ? toEl.value.replace(/-/g,"") : defaultDateStr(0).replace(/-/g,"");
+
+  if (btn) { btn.innerHTML = "Loading..."; btn.style.opacity = ".6"; btn.style.pointerEvents = "none"; }
+  if (status) status.textContent = "Fetching Acquisition Risk Tool events...";
+
+  try {
+    var url = WORKER_URL + "?period=" + startDate + "_" + endDate
+      + "&category=" + encodeURIComponent(ART_CATEGORY)
+      + "&page_size=1000";
+    var resp = await fetch(url);
+    var result = await resp.json();
+    if (result.error) throw new Error(result.error + (result.detail ? " — " + result.detail : ""));
+    artData = result.data || [];
+    if (status) status.innerHTML = '<span style="color:#2E7D32">' + artData.length + ' events loaded for "' + ART_CATEGORY + '".</span>';
+    renderARTContent();
+  } catch (err) {
+    if (status) status.innerHTML = '<span style="color:#E53935">Failed: ' + err.message + '</span>';
+  }
+  if (btn) { btn.innerHTML = "Reload"; btn.style.opacity = "1"; btn.style.pointerEvents = "auto"; }
+}
+
+function renderARTTab() {
+  var el = document.getElementById("tab-art");
+  if (!el) return;
+
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">';
+  html += '<div class="chart-title" style="margin-bottom:0">Acquisition Risk Tool</div>';
+  html += '<div style="display:flex;align-items:center;gap:8px">';
+  html += '<span id="art-status" style="font-size:11px;color:#8A9099">' + (artData ? artData.length + ' events loaded' : 'Not yet loaded') + '</span>';
+  html += '<button id="art-fetch-btn" class="import-btn" onclick="fetchART()" style="background:#2E7D32;padding:5px 12px;font-size:11px">Reload</button>';
+  html += '</div></div>';
+  html += '<div id="art-content">';
+  if (!artData) {
+    html += '<div style="text-align:center;padding:40px;color:#8A9099;font-size:13px">Click Reload to fetch Acquisition Risk Tool data.</div>';
+  }
+  html += '</div>';
+  el.innerHTML = html;
+  if (artData) renderARTContent();
+}
+
+function renderARTContent() {
+  var el = document.getElementById("art-content");
+  if (!el || !artData) return;
+
+  if (artData.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:#8A9099;font-size:13px">No "' + ART_CATEGORY + '" events found for this date range.<br><span style="font-size:11px;margin-top:6px;display:block">Check that the Worker is deployed at v1.4 and that this category name matches exactly what SiteImprove records.</span></div>';
+    return;
+  }
+
+  // ── Aggregate by action ──
+  var byAction = {};
+  artData.forEach(function(r) {
+    var a = r.action || "(none)";
+    if (!byAction[a]) byAction[a] = { action: a, events: 0, labels: {} };
+    byAction[a].events += (r.events || 0);
+    var lbl = r.label || "(none)";
+    byAction[a].labels[lbl] = (byAction[a].labels[lbl] || 0) + (r.events || 0);
+  });
+  var actionRows = Object.values(byAction).sort(function(a,b){ return b.events - a.events; });
+
+  // ── Aggregate by label ──
+  var byLabel = {};
+  artData.forEach(function(r) {
+    var lbl = r.label || "(none)";
+    if (!byLabel[lbl]) byLabel[lbl] = { label: lbl, events: 0, actions: {} };
+    byLabel[lbl].events += (r.events || 0);
+    var a = r.action || "(none)";
+    byLabel[lbl].actions[a] = (byLabel[lbl].actions[a] || 0) + (r.events || 0);
+  });
+  var labelRows = Object.values(byLabel);
+
+  labelRows.sort(function(a, b) {
+    if (artSortField === "label") return artSortDir === "asc" ? a.label.localeCompare(b.label) : b.label.localeCompare(a.label);
+    return artSortDir === "asc" ? (a[artSortField]||0) - (b[artSortField]||0) : (b[artSortField]||0) - (a[artSortField]||0);
+  });
+
+  var totalEvents = artData.reduce(function(s,r){ return s + (r.events||0); }, 0);
+  var uniqueLabels = Object.keys(byLabel).length;
+  var uniqueActions = Object.keys(byAction).length;
+  var maxAction = actionRows.length ? actionRows[0].events : 1;
+  var maxLabel = labelRows.length ? labelRows[0].events : 1;
+
+  var html = '';
+
+  // ── Summary cards ──
+  html += '<div class="cards">';
+  html += card("Total Events", totalEvents.toLocaleString(), "Across all actions this period");
+  html += card("Unique Labels", uniqueLabels, "Distinct label values (banks/entries)", CL.blue);
+  html += card("Action Types", uniqueActions, "Distinct action values observed", CL.gold);
+  html += '</div>';
+
+  // ── Charts row ──
+  html += '<div class="charts">';
+
+  // Actions breakdown
+  html += '<div class="chart-card" style="flex:1 1 300px">';
+  html += '<div class="chart-title">Events by Action</div>';
+  if (actionRows.length) {
+    actionRows.forEach(function(row, i) {
+      var pct = maxAction > 0 ? (row.events / maxAction * 100) : 0;
+      var color = [CL.navy, CL.blue, CL.gold, CL.green, CL.red, "#8B5CF6", "#0891B2", "#D97706"][i % 8];
+      html += '<div class="top5-item" style="margin-bottom:8px">';
+      html += '<div class="top5-row"><span class="top5-title" style="font-size:12px;font-weight:600">' + row.action + '</span>';
+      html += '<span class="top5-count">' + row.events.toLocaleString() + '</span></div>';
+      html += '<div class="top5-bar"><div class="top5-fill" style="width:' + pct + '%;background:' + color + '"></div></div>';
+      var topLabels = Object.entries(row.labels).sort(function(a,b){return b[1]-a[1];}).slice(0,3);
+      if (topLabels.length) {
+        html += '<div style="font-size:10px;color:#8A9099;margin-top:3px;margin-left:2px">';
+        html += topLabels.map(function(kv){ return kv[0] + ' (' + kv[1] + ')'; }).join(' · ');
+        html += '</div>';
+      }
+      html += '</div>';
+    });
+  }
+  html += '</div>';
+
+  // Top labels bar list
+  html += '<div class="chart-card" style="flex:1 1 340px">';
+  html += '<div class="chart-title">Top Labels <span style="font-size:10px;color:#8A9099;font-weight:400">(bank names / identifiers)</span></div>';
+  if (labelRows.length) {
+    labelRows.slice(0, 15).forEach(function(row) {
+      var pct = maxLabel > 0 ? (row.events / maxLabel * 100) : 0;
+      var actionSummary = Object.entries(row.actions).sort(function(a,b){return b[1]-a[1];}).slice(0,2).map(function(kv){return kv[0];}).join(', ');
+      html += '<div class="top5-item" style="margin-bottom:6px">';
+      html += '<div class="top5-row">';
+      html += '<span class="top5-title">' + trunc(row.label, 38) + '</span>';
+      html += '<div class="top5-right"><span style="font-size:10px;color:#8A9099;margin-right:4px">' + actionSummary + '</span><span class="top5-count">' + row.events + '</span></div>';
+      html += '</div>';
+      html += '<div class="top5-bar"><div class="top5-fill" style="width:' + pct + '%;background:' + CL.navy + '"></div></div>';
+      html += '</div>';
+    });
+    if (labelRows.length > 15) {
+      html += '<div style="font-size:10px;color:#8A9099;margin-top:4px">+' + (labelRows.length - 15) + ' more — see table below</div>';
+    }
+  }
+  html += '</div>';
+
+  html += '</div>'; // end charts row
+
+  // ── Full sortable label table ──
+  html += '<div class="chart-card" style="padding:0;overflow:hidden;margin-bottom:16px">';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:12px">';
+  html += '<thead><tr style="border-bottom:2px solid #E8ECF0">';
+
+  var cols = [
+    { l: "Label", f: "label", a: "left" },
+    { l: "Actions Seen", f: "_actions", a: "left" },
+    { l: "Events", f: "events", a: "center" }
+  ];
+  cols.forEach(function(col) {
+    var active = artSortField === col.f;
+    var arrow = active ? (artSortDir === "desc" ? " ▼" : " ▲") : "";
+    html += '<th style="text-align:' + (col.a||"center") + ';padding:10px 12px;font-size:10px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;cursor:pointer;color:' + (active ? "#002D72" : "#8A9099") + '" onclick="artSort(\'' + col.f + '\')">' + col.l + arrow + '</th>';
+  });
+  html += '</tr></thead><tbody>';
+
+  labelRows.forEach(function(row, i) {
+    var actionStr = Object.entries(row.actions).sort(function(a,b){return b[1]-a[1];}).map(function(kv){
+      return '<span style="display:inline-block;margin-right:4px;font-size:10px;padding:1px 6px;border-radius:6px;background:#0960BB14;color:#0960BB;font-weight:600">' + kv[0] + ' <span style="font-weight:400;color:#8A9099">(' + kv[1] + ')</span></span>';
+    }).join('');
+    html += '<tr style="border-bottom:1px solid #F0F2F5;' + (i%2===1?"background:#FAFBFC;":"") + '">';
+    html += '<td style="padding:9px 12px;font-weight:500;max-width:320px"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + row.label + '">' + row.label + '</div></td>';
+    html += '<td style="padding:9px 12px">' + actionStr + '</td>';
+    html += '<td style="padding:9px 12px;text-align:center;font-weight:700;color:#002D72">' + row.events.toLocaleString() + '</td>';
+    html += '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+
+  // ── Debug panel ──
+  html += '<details style="margin-bottom:16px">';
+  html += '<summary style="font-size:11px;color:#8A9099;cursor:pointer;padding:8px 0">▶ Raw event schema (first 5 rows)</summary>';
+  html += '<div style="margin-top:8px;padding:12px;border-radius:8px;background:#F5F7FA;font-family:monospace;font-size:11px;color:#4C4C4C;overflow-x:auto;white-space:pre">';
+  html += JSON.stringify(artData.slice(0, 5), null, 2).replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  html += '</div></details>';
+
+  el.innerHTML = html;
+}
+
+function artSort(field) {
+  if (artSortField === field) {
+    artSortDir = artSortDir === "desc" ? "asc" : "desc";
+  } else {
+    artSortField = field;
+    artSortDir = "desc";
+  }
+  renderARTContent();
+}
+
 // ── EXPORT PDF ──
 async function exportPDF(){
   const btn=document.getElementById("export-btn");const origText=btn.innerHTML;
   btn.innerHTML="Generating...";btn.style.opacity=".6";btn.style.pointerEvents="none";
   try{
     const {jsPDF}=window.jspdf;const pdf=new jsPDF("l","mm","a4");const pw=pdf.internal.pageSize.getWidth();const ph=pdf.internal.pageSize.getHeight();const margin=12;const contentW=pw-margin*2;const headerH=27;const footerH=8;const availH=ph-headerH-footerH;let pageCount=0;
-    function drawHeader(title,contd){pdf.setFillColor(0,45,114);pdf.rect(0,0,pw,18,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);pdf.text("CommandBar Analytics v2.5.4",margin,12);pdf.setFont("helvetica","normal");pdf.setFontSize(9);pdf.text((PERIOD?PERIOD+" · ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});pdf.setFillColor(9,96,187);pdf.rect(0,18,pw,6,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(8);pdf.setTextColor(255,255,255);pdf.text(title.toUpperCase()+(contd?" (CONTINUED)":""),margin,22.5);pdf.setTextColor(0,0,0);}
-    function drawFooter(n){pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);pdf.text("CommandBar Analytics Dashboard v2.5.4 · SiteImprove Events",margin,ph-5);pdf.text("Page "+n,pw-margin,ph-5,{align:"right"});}
+    function drawHeader(title,contd){pdf.setFillColor(0,45,114);pdf.rect(0,0,pw,18,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(255,255,255);pdf.text("CommandBar Analytics v2.6.0",margin,12);pdf.setFont("helvetica","normal");pdf.setFontSize(9);pdf.text((PERIOD?PERIOD+" · ":"")+"SouthState Correspondent",pw-margin,12,{align:"right"});pdf.setFillColor(9,96,187);pdf.rect(0,18,pw,6,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(8);pdf.setTextColor(255,255,255);pdf.text(title.toUpperCase()+(contd?" (CONTINUED)":""),margin,22.5);pdf.setTextColor(0,0,0);}
+    function drawFooter(n){pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);pdf.text("CommandBar Analytics Dashboard v2.6.0 · SiteImprove Events",margin,ph-5);pdf.text("Page "+n,pw-margin,ph-5,{align:"right"});}
     function addPage(title,contd){if(pageCount>0)pdf.addPage();pageCount++;drawHeader(title,contd||false);drawFooter(pageCount);}
     async function captureAndAdd(el,tabName){const canvas=await html2canvas(el,{scale:2,backgroundColor:"#F5F7FA",useCORS:true,logging:false,windowWidth:980});const imgData=canvas.toDataURL("image/jpeg",0.92);const imgW=contentW;const imgH=(canvas.height/canvas.width)*contentW;const finalH=Math.min(imgH,availH);const finalW=imgH>availH?(availH/imgH)*imgW:imgW;const xOff=margin+(contentW-finalW)/2;addPage(tabName);pdf.addImage(imgData,"JPEG",xOff,headerH,finalW,finalH);}
-    function drawContentTable(){
-      addPage("Content",true);const d=process(RAW_DATA);
-      const sortedArticles=[...d.articles].sort((a,b)=>{const f=contentSortField,dir=contentSortDir;if(f==="title"||f==="type"){const av=(a[f]||"").toLowerCase(),bv=(b[f]||"").toLowerCase();return dir==="asc"?av.localeCompare(bv):bv.localeCompare(av);}return dir==="asc"?(a[f]||0)-(b[f]||0):(b[f]||0)-(a[f]||0);});
-      const rows=sortedArticles.slice(0,15);const rowH=7;const headH=8;
-      const cols=[{label:"TITLE",w:contentW*0.42,a:"left"},{label:"TYPE",w:contentW*0.08,a:"center"},{label:"ENGAGED",w:contentW*0.10,a:"center"},{label:"SKIM",w:contentW*0.10,a:"center"},{label:"BOUNCE",w:contentW*0.10,a:"center"},{label:"TOTAL",w:contentW*0.10,a:"center"},{label:"SIGNAL",w:contentW*0.10,a:"center"}];
-      let y=headerH+2;pdf.setFont("helvetica","bold");pdf.setFontSize(10);pdf.setTextColor(0,45,114);pdf.text("Top "+rows.length+" Content by Performance",margin,y+4);y+=10;
-      pdf.setFillColor(0,45,114);pdf.rect(margin,y,contentW,headH,"F");pdf.setFont("helvetica","bold");pdf.setFontSize(7.5);pdf.setTextColor(255,255,255);
-      let x=margin;cols.forEach(c=>{const tx=c.a==="left"?x+3:x+c.w/2;pdf.text(c.label,tx,y+5.5,{align:c.a==="left"?"left":"center"});x+=c.w;});y+=headH;
-      rows.forEach((a,idx)=>{
-        if(idx%2===0){pdf.setFillColor(248,249,252);pdf.rect(margin,y,contentW,rowH,"F");}
-        x=margin;pdf.setFont("helvetica","normal");pdf.setFontSize(8);pdf.setTextColor(26,26,46);
-        const t=a.title.length>60?a.title.slice(0,59)+"\u2026":a.title;pdf.text(t,x+3,y+4.8);x+=cols[0].w;
-        const tc=a.type==="Blog"?[9,96,187]:a.type==="Podcast"?[180,140,20]:[138,144,153];pdf.setFont("helvetica","bold");pdf.setFontSize(7.5);pdf.setTextColor(tc[0],tc[1],tc[2]);pdf.text(a.type,x+cols[1].w/2,y+4.8,{align:"center"});x+=cols[1].w;
-        pdf.setFont("helvetica","bold");pdf.setFontSize(8.5);
-        if(a.engaged){pdf.setTextColor(9,96,187);pdf.text(String(a.engaged),x+cols[2].w/2,y+4.8,{align:"center"});}else{pdf.setTextColor(208,213,221);pdf.text("\u2013",x+cols[2].w/2,y+4.8,{align:"center"});}x+=cols[2].w;
-        if(a.skim){pdf.setTextColor(212,160,23);pdf.text(String(a.skim),x+cols[3].w/2,y+4.8,{align:"center"});}else{pdf.setTextColor(208,213,221);pdf.text("\u2013",x+cols[3].w/2,y+4.8,{align:"center"});}x+=cols[3].w;
-        if(a.bounce){pdf.setTextColor(229,57,53);pdf.text(String(a.bounce),x+cols[4].w/2,y+4.8,{align:"center"});}else{pdf.setTextColor(208,213,221);pdf.text("\u2013",x+cols[4].w/2,y+4.8,{align:"center"});}x+=cols[4].w;
-        pdf.setFont("helvetica","bold");pdf.setTextColor(0,45,114);pdf.text(String(a.total),x+cols[5].w/2,y+4.8,{align:"center"});x+=cols[5].w;
-        const sc=a.engPct>=50?[9,96,187]:a.engPct>0?[212,160,23]:[229,57,53];const sl=a.engPct>=50?"Strong":a.engPct>0?"Mixed":"Weak";pdf.setFontSize(7.5);pdf.setTextColor(sc[0],sc[1],sc[2]);pdf.text(sl,x+cols[6].w/2,y+4.8,{align:"center"});
-        pdf.setDrawColor(232,236,240);pdf.setLineWidth(0.2);pdf.line(margin,y+rowH,margin+contentW,y+rowH);y+=rowH;
-      });
-      if(sortedArticles.length>rows.length){y+=4;pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);pdf.text("Showing top "+rows.length+" of "+sortedArticles.length+" total articles.",margin,y);}
-    }
     const tabs=["overview","content","insights","engagement","historical","leaderboard","companies","map"];
     const tabNames=["Overview","Content","Performance","Activity","Compare","Trending","Companies","Map"];
     const savedTab=currentTab;
     for(let i=0;i<tabs.length;i++){
       tabs.forEach(t=>{const el=document.getElementById("tab-"+t);el.style.display=t===tabs[i]?"block":"none";el.classList.remove("hidden");});
       await new Promise(r=>setTimeout(r,600));
-      if(tabs[i]==="content"){await captureAndAdd(document.getElementById("content-charts"),"Content");drawContentTable();}
+      if(tabs[i]==="content"){await captureAndAdd(document.getElementById("content-charts"),"Content");}
       else{await captureAndAdd(document.getElementById("tab-"+tabs[i]),tabNames[i]);}
     }
     tabs.forEach(t=>{const el=document.getElementById("tab-"+t);el.style.display="";el.classList.toggle("hidden",t!==savedTab);});
@@ -1745,13 +1890,13 @@ async function exportPDF(){
   }catch(err){
     console.error("PDF export error:",err);
     document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>PDF export failed: '+err.message+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
-    ["overview","content","insights","engagement","historical","leaderboard","companies","map","contacts"].forEach(t=>{const el=document.getElementById("tab-"+t);el.style.display="";el.classList.toggle("hidden",t!==currentTab);});
+    ["overview","content","insights","engagement","historical","leaderboard","companies","map","contacts","art"].forEach(t=>{const el=document.getElementById("tab-"+t);el.style.display="";el.classList.toggle("hidden",t!==currentTab);});
   }
   btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";
 }
 
 // ── INIT ──
-if(new URLSearchParams(window.location.search).has("csv")){var csvBtn=document.getElementById("csv-btn");if(csvBtn)csvBtn.style.display="";}
+if(new URLSearchParams(window.location.search).has("csv")){var csvBtn=document.getElementById("csv-input");if(csvBtn)csvBtn.style.display="";}
 render();
 </script>
 </body>
