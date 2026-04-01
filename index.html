@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CommandBar Analytics Dashboard v2.5.4.1</title>
+<title>CommandBar Analytics Dashboard v2.5.4</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -116,7 +116,7 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div class="header">
     <div class="header-left">
       <div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
-      <div style="position:relative;display:inline-block"><div class="title">CommandBar Analytics<span style="margin-left:10px;font-size:11px;font-weight:300;letter-spacing:.5px;color:rgba(255,255,255,0.35);vertical-align:middle">v2.5.4.1</span></div><div class="subtitle" id="period-label">SouthState Correspondent</div></div>
+      <div style="position:relative;display:inline-block"><div class="title">CommandBar Analytics<span style="margin-left:10px;font-size:11px;font-weight:300;letter-spacing:.5px;color:rgba(255,255,255,0.35);vertical-align:middle">v2.5.4</span></div><div class="subtitle" id="period-label">SouthState Correspondent</div></div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <div style="display:flex;gap:4px;align-items:center">
@@ -168,7 +168,7 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div id="tab-contacts" class="hidden"></div>
   <div id="tab-art" class="hidden"></div>
 
-  <div class="footer" id="footer">CommandBar Analytics Dashboard v2.5.4.1 · Powered by SiteImprove Events + Leadfeeder · SouthState Correspondent</div>
+  <div class="footer" id="footer">CommandBar Analytics Dashboard v2.5.4.2 · Powered by SiteImprove Events + Leadfeeder · SouthState Correspondent</div>
 </div>
 
 <script>
@@ -214,7 +214,7 @@ var lfFeedsLoaded = false;
 async function fetchLfFeeds(){
   if(lfFeedsLoaded)return;
   try{
-    var resp = await fetch(LF_URL+"/feeds");
+    var resp = await fetch(LF_URL+"/feeds", { cache: 'no-store' });
     var result = await resp.json();
     if(result.data && result.data.length > 0){
       lfFeeds = result.data.map(function(f){
@@ -794,7 +794,7 @@ async function fetchCompanies(){
     var more=true;
     while(more&&pg<=5){
       if(status)status.textContent="Fetching page "+pg+"...";
-      var resp=await fetch(lfLeadsUrl(pg, startDate, endDate));
+      var resp=await fetch(lfLeadsUrl(pg, startDate, endDate), { cache: 'no-store' });
       var result=await resp.json();
       if(result.error)throw new Error(result.error);
       allLeads=allLeads.concat(result.data||[]);
@@ -957,7 +957,7 @@ async function toggleCompanyPages(leadId,rowId){
     var toEl=document.getElementById("date-to");
     var startDate=fromEl&&fromEl.value?fromEl.value:defaultDateStr(-6);
     var endDate=toEl&&toEl.value?toEl.value:defaultDateStr(0);
-    var resp=await fetch(LF_URL+"/leads/"+leadId+"/visits?start_date="+startDate+"&end_date="+endDate);
+    var resp=await fetch(LF_URL+"/leads/"+leadId+"/visits?start_date="+startDate+"&end_date="+endDate, { cache: 'no-store' });
     var result=await resp.json();
     if(result.error){contentEl.innerHTML='<span style="color:#E53935">Error: '+result.error+'</span>';return;}
     var visitsData=result.data||[];
@@ -1309,7 +1309,7 @@ async function fetchHistorical(){
     for(var i=0;i<dayList.length;i++){
       var dateStr=dayList[i].replace(/-/g,"");
       status.textContent=statusPrefix+" day "+(i+1)+" of "+dayList.length+"...";
-      var resp=await fetch(WORKER_URL+"?period="+dateStr+"&page_size=1000");
+      var resp=await fetch(WORKER_URL+"?period="+dateStr+"&page_size=1000", { cache: 'no-store' });
       var data=await resp.json();
       var dayEvents=data.data||[];
       var dayObj={date:dayList[i],_titles:{}};
@@ -1484,7 +1484,7 @@ async function fetchAPI(){
   document.getElementById("import-msg").innerHTML="";
   try{
     const url=WORKER_URL+"?period="+from+"_"+to+"&page_size=1000";
-    const resp=await fetch(url);
+    const resp=await fetch(url, { cache: 'no-store' });
     if(!resp.ok){const err=await resp.text();throw new Error("API returned "+resp.status+": "+err);}
     const result=await resp.json();
     if(result.error){throw new Error(result.error+(result.detail?" — "+result.detail:""));}
@@ -1688,7 +1688,7 @@ async function fetchART() {
     var url = WORKER_URL + "?period=" + startDate + "_" + endDate
       + "&category=" + encodeURIComponent(ART_CATEGORY)
       + "&page_size=1000";
-    var resp = await fetch(url);
+    var resp = await fetch(url, { cache: 'no-store' });
     var result = await resp.json();
     if (result.error) throw new Error(result.error + (result.detail ? " — " + result.detail : ""));
     artData = result.data || [];
