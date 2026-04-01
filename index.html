@@ -1506,6 +1506,8 @@ async function fetchAPI(){
     render();
     buildContactsIndex();
     if(currentTab==="contacts") renderContactsTab();
+    setTimeout(fetchART, 600);
+    setTimeout(fetchCompanies, 800);
   }catch(err){
     console.error("API fetch error:",err);
     document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>Fetch failed: '+err.message+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
