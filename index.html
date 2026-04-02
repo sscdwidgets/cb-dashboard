@@ -1834,16 +1834,19 @@ function renderARTContent() {
     return;
   }
 
-  // ── Parse and dedupe by label ──
+  // ── Parse and dedupe by bank identity (name+cert), not raw label ──
   var byLabel = {};
   artData.forEach(function(r) {
     var lbl = r.label || '';
-    if (!byLabel[lbl]) {
-      byLabel[lbl] = Object.assign(parseARTLabel(lbl), { events: 0, actions: {} });
+    var parsed = parseARTLabel(lbl);
+    // Use cert as dedup key if available, otherwise bank name
+    var key = parsed.cert ? parsed.cert : parsed.bankName.toLowerCase();
+    if (!byLabel[key]) {
+      byLabel[key] = Object.assign(parsed, { events: 0, actions: {} });
     }
-    byLabel[lbl].events += (r.events || 0);
+    byLabel[key].events += (r.events || 0);
     var a = r.action || '(none)';
-    byLabel[lbl].actions[a] = (byLabel[lbl].actions[a] || 0) + (r.events || 0);
+    byLabel[key].actions[a] = (byLabel[key].actions[a] || 0) + (r.events || 0);
   });
 
   var allRows = Object.values(byLabel);
@@ -2040,8 +2043,10 @@ function artSort(field) {
     var byLabel = {};
     artData.forEach(function(r) {
       var lbl = r.label || '';
-      if (!byLabel[lbl]) byLabel[lbl] = Object.assign(parseARTLabel(lbl), {events:0, actions:{}});
-      byLabel[lbl].events += (r.events||0);
+      var parsed = parseARTLabel(lbl);
+      var key = parsed.cert ? parsed.cert : parsed.bankName.toLowerCase();
+      if (!byLabel[key]) byLabel[key] = Object.assign(parsed, {events:0, actions:{}});
+      byLabel[key].events += (r.events||0);
     });
     list.innerHTML = renderARTList(Object.values(byLabel));
   }
@@ -2059,8 +2064,10 @@ function artRefreshList() {
   var byLabel = {};
   artData.forEach(function(r) {
     var lbl = r.label || '';
-    if (!byLabel[lbl]) byLabel[lbl] = Object.assign(parseARTLabel(lbl), {events:0, actions:{}});
-    byLabel[lbl].events += (r.events||0);
+    var parsed = parseARTLabel(lbl);
+    var key = parsed.cert ? parsed.cert : parsed.bankName.toLowerCase();
+    if (!byLabel[key]) byLabel[key] = Object.assign(parsed, {events:0, actions:{}});
+    byLabel[key].events += (r.events||0);
   });
   list.innerHTML = renderARTList(Object.values(byLabel));
 }
