@@ -1850,6 +1850,7 @@ function renderARTContent() {
   });
 
   var allRows = Object.values(byLabel);
+  var certRows = allRows.filter(function(r){ return r.cert !== null; });
 
   // ── Gather states for dropdown ──
   var stateSet = {};
@@ -1882,7 +1883,7 @@ function renderARTContent() {
   // ── Summary cards ──
   var totalEvents = allRows.reduce(function(s,r){return s+r.events;},0);
   var html = '<div class="cards">';
-  html += card("Banks Tracked", allRows.length.toLocaleString(), "Unique institutions this period");
+  html += card("Banks Tracked", certRows.length.toLocaleString(), "Unique institutions this period");
   html += card("Total Events", totalEvents.toLocaleString(), "Across all actions", CL.blue);
   html += card("States", allStates.length, "States represented", CL.gold);
   var highRisk = allRows.filter(function(r){return r.score !== null && r.score >= 70;}).length;
