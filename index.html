@@ -1741,8 +1741,6 @@ function setContactPageSearch(val){
 
 // ── ACQUISITION RISK TOOL TAB ──
 var artData = null;
-var artSortField = "events";
-var artSortDir = "desc";
 var ART_CATEGORY = "Acquisition Risk Tool";
 
 async function fetchART() {
@@ -1764,7 +1762,7 @@ async function fetchART() {
     var result = await resp.json();
     if (result.error) throw new Error(result.error + (result.detail ? " — " + result.detail : ""));
     artData = result.data || [];
-    if (status) status.innerHTML = '<span style="color:#2E7D32">' + artData.length + ' events loaded for "' + ART_CATEGORY + '".</span>';
+    if (status) status.innerHTML = '<span style="color:#2E7D32">' + artData.length + ' rows loaded for "' + ART_CATEGORY + '".</span>';
     renderARTContent();
   } catch (err) {
     if (status) status.innerHTML = '<span style="color:#E53935">Failed: ' + err.message + '</span>';
@@ -1779,7 +1777,7 @@ function renderARTTab() {
   var html = '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">';
   html += '<div class="chart-title" style="margin-bottom:0">Acquisition Risk Tool</div>';
   html += '<div style="display:flex;align-items:center;gap:8px">';
-  html += '<span id="art-status" style="font-size:11px;color:#8A9099">' + (artData ? artData.length + ' events loaded' : 'Not yet loaded') + '</span>';
+  html += '<span id="art-status" style="font-size:11px;color:#8A9099">' + (artData ? artData.length + ' rows loaded' : 'Not yet loaded') + '</span>';
   html += '<button id="art-fetch-btn" class="import-btn" onclick="fetchART()" style="background:#2E7D32;padding:5px 12px;font-size:11px">Reload</button>';
   html += '</div></div>';
   html += '<div id="art-content">';
@@ -1791,137 +1789,136 @@ function renderARTTab() {
   if (artData) renderARTContent();
 }
 
+// ── ART label parser ──
+// Format: "BANK NAME (CERT #XXXXX), ST | Score: NN | Risk Label"
+function parseARTLabel(lbl) {
+  var certMatch = lbl.match(/^(.*?)\s*\(CERT\s*#(\d+)\),\s*([A-Z]{2})\s*\|\s*Score:\s*(\d+)\s*\|\s*(.+)$/i);
+  if (certMatch) {
+    return {
+      bankName: certMatch[1].trim(),
+      cert: certMatch[2],
+      state: certMatch[3].toUpperCase(),
+      score: parseInt(certMatch[4], 10),
+      risk: certMatch[5].trim(),
+      raw: lbl
+    };
+  }
+  // Fallback — try partial matches
+  var stateMatch = lbl.match(/,\s*([A-Z]{2})/);
+  var scoreMatch = lbl.match(/Score:\s*(\d+)/i);
+  var riskMatch = lbl.match(/\|\s*([^|]+)$/);
+  return {
+    bankName: lbl.split('(')[0].trim(),
+    cert: null,
+    state: stateMatch ? stateMatch[1] : null,
+    score: scoreMatch ? parseInt(scoreMatch[1], 10) : null,
+    risk: riskMatch ? riskMatch[1].trim() : null,
+    raw: lbl
+  };
+}
+
+// ART filter state
+var artSearch = '';
+var artStateFilter = '';
+var artScoreMin = 0;
+var artScoreMax = 100;
+var artSortField = 'score';
+var artSortDir = 'desc';
+
 function renderARTContent() {
   var el = document.getElementById("art-content");
   if (!el || !artData) return;
 
   if (artData.length === 0) {
-    el.innerHTML = '<div style="text-align:center;padding:40px;color:#8A9099;font-size:13px">No "' + ART_CATEGORY + '" events found for this date range.<br><span style="font-size:11px;margin-top:6px;display:block">Check that the Worker is deployed at v1.4 and that this category name matches exactly what SiteImprove records.</span></div>';
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:#8A9099;font-size:13px">No "' + ART_CATEGORY + '" events found for this date range.</div>';
     return;
   }
 
-  // ── Aggregate by action ──
-  var byAction = {};
-  artData.forEach(function(r) {
-    var a = r.action || "(none)";
-    if (!byAction[a]) byAction[a] = { action: a, events: 0, labels: {} };
-    byAction[a].events += (r.events || 0);
-    var lbl = r.label || "(none)";
-    byAction[a].labels[lbl] = (byAction[a].labels[lbl] || 0) + (r.events || 0);
-  });
-  var actionRows = Object.values(byAction).sort(function(a,b){ return b.events - a.events; });
-
-  // ── Aggregate by label ──
+  // ── Parse and dedupe by label ──
   var byLabel = {};
   artData.forEach(function(r) {
-    var lbl = r.label || "(none)";
-    if (!byLabel[lbl]) byLabel[lbl] = { label: lbl, events: 0, actions: {} };
+    var lbl = r.label || '';
+    if (!byLabel[lbl]) {
+      byLabel[lbl] = Object.assign(parseARTLabel(lbl), { events: 0, actions: {} });
+    }
     byLabel[lbl].events += (r.events || 0);
-    var a = r.action || "(none)";
+    var a = r.action || '(none)';
     byLabel[lbl].actions[a] = (byLabel[lbl].actions[a] || 0) + (r.events || 0);
   });
-  var labelRows = Object.values(byLabel);
 
-  labelRows.sort(function(a, b) {
-    if (artSortField === "label") return artSortDir === "asc" ? a.label.localeCompare(b.label) : b.label.localeCompare(a.label);
-    return artSortDir === "asc" ? (a[artSortField]||0) - (b[artSortField]||0) : (b[artSortField]||0) - (a[artSortField]||0);
-  });
+  var allRows = Object.values(byLabel);
 
-  var totalEvents = artData.reduce(function(s,r){ return s + (r.events||0); }, 0);
-  var uniqueLabels = Object.keys(byLabel).length;
-  var uniqueActions = Object.keys(byAction).length;
-  var maxAction = actionRows.length ? actionRows[0].events : 1;
-  var maxLabel = labelRows.length ? labelRows[0].events : 1;
+  // ── Gather states for dropdown ──
+  var stateSet = {};
+  allRows.forEach(function(r) { if (r.state) stateSet[r.state] = true; });
+  var allStates = Object.keys(stateSet).sort();
 
-  var html = '';
+  // ── Score range for parsed rows ──
+  var scoredRows = allRows.filter(function(r) { return r.score !== null; });
+  var globalMin = scoredRows.length ? Math.min.apply(null, scoredRows.map(function(r){return r.score;})) : 0;
+  var globalMax = scoredRows.length ? Math.max.apply(null, scoredRows.map(function(r){return r.score;})) : 100;
+
+  // ── Risk label colors ──
+  function riskColor(risk) {
+    if (!risk) return '#8A9099';
+    var r = risk.toLowerCase();
+    if (r.indexOf('high') > -1) return CL.red;
+    if (r.indexOf('moderate') > -1) return CL.gold;
+    if (r.indexOf('low') > -1) return CL.green;
+    return '#8A9099';
+  }
+
+  // ── Score bar color ──
+  function scoreColor(score) {
+    if (score === null) return '#8A9099';
+    if (score >= 70) return CL.red;
+    if (score >= 40) return CL.gold;
+    return CL.green;
+  }
 
   // ── Summary cards ──
-  html += '<div class="cards">';
-  html += card("Total Events", totalEvents.toLocaleString(), "Across all actions this period");
-  html += card("Unique Labels", uniqueLabels, "Distinct label values (banks/entries)", CL.blue);
-  html += card("Action Types", uniqueActions, "Distinct action values observed", CL.gold);
+  var totalEvents = allRows.reduce(function(s,r){return s+r.events;},0);
+  var html = '<div class="cards">';
+  html += card("Banks Tracked", allRows.length.toLocaleString(), "Unique institutions this period");
+  html += card("Total Events", totalEvents.toLocaleString(), "Across all actions", CL.blue);
+  html += card("States", allStates.length, "States represented", CL.gold);
+  var highRisk = allRows.filter(function(r){return r.score !== null && r.score >= 70;}).length;
+  if (highRisk > 0) html += card("High Risk", highRisk, "Score 70+", CL.red);
   html += '</div>';
 
-  // ── Charts row ──
-  html += '<div class="charts">';
+  // ── Filters row ──
+  html += '<div class="chart-card" style="margin-bottom:16px;padding:12px 16px">';
+  html += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">';
 
-  // Actions breakdown
-  html += '<div class="chart-card" style="flex:1 1 300px">';
-  html += '<div class="chart-title">Events by Action</div>';
-  if (actionRows.length) {
-    actionRows.forEach(function(row, i) {
-      var pct = maxAction > 0 ? (row.events / maxAction * 100) : 0;
-      var color = [CL.navy, CL.blue, CL.gold, CL.green, CL.red, "#8B5CF6", "#0891B2", "#D97706"][i % 8];
-      html += '<div class="top5-item" style="margin-bottom:8px">';
-      html += '<div class="top5-row"><span class="top5-title" style="font-size:12px;font-weight:600">' + row.action + '</span>';
-      html += '<span class="top5-count">' + row.events.toLocaleString() + '</span></div>';
-      html += '<div class="top5-bar"><div class="top5-fill" style="width:' + pct + '%;background:' + color + '"></div></div>';
-      var topLabels = Object.entries(row.labels).sort(function(a,b){return b[1]-a[1];}).slice(0,3);
-      if (topLabels.length) {
-        html += '<div style="font-size:10px;color:#8A9099;margin-top:3px;margin-left:2px">';
-        html += topLabels.map(function(kv){ return kv[0] + ' (' + kv[1] + ')'; }).join(' · ');
-        html += '</div>';
-      }
-      html += '</div>';
-    });
-  }
-  html += '</div>';
+  // Search
+  html += '<div style="flex:1;min-width:180px"><div style="font-size:10px;font-weight:700;color:#8A9099;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Search Bank</div>';
+  html += '<input type="text" id="art-search" placeholder="Bank name..." value="' + artSearch + '" oninput="artSetSearch(this.value)" style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid #E8ECF0;font-size:12px;font-family:inherit;outline:none"></div>';
 
-  // Top labels bar list
-  html += '<div class="chart-card" style="flex:1 1 340px">';
-  html += '<div class="chart-title">Top Labels <span style="font-size:10px;color:#8A9099;font-weight:400">(bank names / identifiers)</span></div>';
-  if (labelRows.length) {
-    labelRows.slice(0, 15).forEach(function(row) {
-      var pct = maxLabel > 0 ? (row.events / maxLabel * 100) : 0;
-      var actionSummary = Object.entries(row.actions).sort(function(a,b){return b[1]-a[1];}).slice(0,2).map(function(kv){return kv[0];}).join(', ');
-      html += '<div class="top5-item" style="margin-bottom:6px">';
-      html += '<div class="top5-row">';
-      html += '<span class="top5-title">' + trunc(row.label, 38) + '</span>';
-      html += '<div class="top5-right"><span style="font-size:10px;color:#8A9099;margin-right:4px">' + actionSummary + '</span><span class="top5-count">' + row.events + '</span></div>';
-      html += '</div>';
-      html += '<div class="top5-bar"><div class="top5-fill" style="width:' + pct + '%;background:' + CL.navy + '"></div></div>';
-      html += '</div>';
-    });
-    if (labelRows.length > 15) {
-      html += '<div style="font-size:10px;color:#8A9099;margin-top:4px">+' + (labelRows.length - 15) + ' more — see table below</div>';
-    }
-  }
-  html += '</div>';
-
-  html += '</div>'; // end charts row
-
-  // ── Full sortable label table ──
-  html += '<div class="chart-card" style="padding:0;overflow:hidden;margin-bottom:16px">';
-  html += '<table style="width:100%;border-collapse:collapse;font-size:12px">';
-  html += '<thead><tr style="border-bottom:2px solid #E8ECF0">';
-
-  var cols = [
-    { l: "Label", f: "label", a: "left" },
-    { l: "Actions Seen", f: "_actions", a: "left" },
-    { l: "Events", f: "events", a: "center" }
-  ];
-  cols.forEach(function(col) {
-    var active = artSortField === col.f;
-    var arrow = active ? (artSortDir === "desc" ? " ▼" : " ▲") : "";
-    html += '<th style="text-align:' + (col.a||"center") + ';padding:10px 12px;font-size:10px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;cursor:pointer;color:' + (active ? "#002D72" : "#8A9099") + '" onclick="artSort(\'' + col.f + '\')">' + col.l + arrow + '</th>';
+  // State dropdown
+  html += '<div style="min-width:100px"><div style="font-size:10px;font-weight:700;color:#8A9099;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">State</div>';
+  html += '<select id="art-state" onchange="artSetState(this.value)" style="width:100%;padding:6px 8px;border-radius:8px;border:1px solid #E8ECF0;font-size:12px;font-family:inherit;outline:none">';
+  html += '<option value="">All</option>';
+  allStates.forEach(function(st) {
+    html += '<option value="' + st + '"' + (artStateFilter === st ? ' selected' : '') + '>' + st + '</option>';
   });
-  html += '</tr></thead><tbody>';
+  html += '</select></div>';
 
-  labelRows.forEach(function(row, i) {
-    var actionStr = Object.entries(row.actions).sort(function(a,b){return b[1]-a[1];}).map(function(kv){
-      return '<span style="display:inline-block;margin-right:4px;font-size:10px;padding:1px 6px;border-radius:6px;background:#0960BB14;color:#0960BB;font-weight:600">' + kv[0] + ' <span style="font-weight:400;color:#8A9099">(' + kv[1] + ')</span></span>';
-    }).join('');
-    html += '<tr style="border-bottom:1px solid #F0F2F5;' + (i%2===1?"background:#FAFBFC;":"") + '">';
-    html += '<td style="padding:9px 12px;font-weight:500;max-width:320px"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + row.label + '">' + row.label + '</div></td>';
-    html += '<td style="padding:9px 12px">' + actionStr + '</td>';
-    html += '<td style="padding:9px 12px;text-align:center;font-weight:700;color:#002D72">' + row.events.toLocaleString() + '</td>';
-    html += '</tr>';
-  });
+  // Score min/max
+  html += '<div style="min-width:120px"><div style="font-size:10px;font-weight:700;color:#8A9099;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Score Min</div>';
+  html += '<input type="number" id="art-score-min" min="0" max="100" value="' + artScoreMin + '" oninput="artSetScoreMin(this.value)" style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid #E8ECF0;font-size:12px;font-family:inherit;outline:none"></div>';
 
-  html += '</tbody></table></div>';
+  html += '<div style="min-width:120px"><div style="font-size:10px;font-weight:700;color:#8A9099;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Score Max</div>';
+  html += '<input type="number" id="art-score-max" min="0" max="100" value="' + artScoreMax + '" oninput="artSetScoreMax(this.value)" style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid #E8ECF0;font-size:12px;font-family:inherit;outline:none"></div>';
+
+  // Reset
+  html += '<div><button onclick="artResetFilters()" style="padding:6px 14px;border-radius:8px;border:1px solid #E8ECF0;background:#fff;font-size:11px;font-weight:600;color:#8A9099;cursor:pointer">Reset</button></div>';
+  html += '</div></div>';
+
+  // ── Apply filters ──
+  html += '<div id="art-list">' + renderARTList(allRows, riskColor, scoreColor) + '</div>';
 
   // ── Debug panel ──
-  html += '<details style="margin-bottom:16px">';
+  html += '<details style="margin-bottom:16px;margin-top:8px">';
   html += '<summary style="font-size:11px;color:#8A9099;cursor:pointer;padding:8px 0">▶ Raw event schema (first 5 rows)</summary>';
   html += '<div style="margin-top:8px;padding:12px;border-radius:8px;background:#F5F7FA;font-family:monospace;font-size:11px;color:#4C4C4C;overflow-x:auto;white-space:pre">';
   html += JSON.stringify(artData.slice(0, 5), null, 2).replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -1930,14 +1927,142 @@ function renderARTContent() {
   el.innerHTML = html;
 }
 
-function artSort(field) {
-  if (artSortField === field) {
-    artSortDir = artSortDir === "desc" ? "asc" : "desc";
-  } else {
-    artSortField = field;
-    artSortDir = "desc";
+function renderARTList(allRows, riskColor, scoreColor) {
+  // Re-derive color fns if called standalone
+  if (!riskColor) riskColor = function(risk) {
+    if (!risk) return '#8A9099';
+    var r = risk.toLowerCase();
+    if (r.indexOf('high') > -1) return CL.red;
+    if (r.indexOf('moderate') > -1) return CL.gold;
+    if (r.indexOf('low') > -1) return CL.green;
+    return '#8A9099';
+  };
+  if (!scoreColor) scoreColor = function(score) {
+    if (score === null) return '#8A9099';
+    if (score >= 70) return CL.red;
+    if (score >= 40) return CL.gold;
+    return CL.green;
+  };
+
+  // Filter
+  var filtered = allRows.filter(function(r) {
+    if (artSearch && r.bankName.toLowerCase().indexOf(artSearch.toLowerCase()) === -1) return false;
+    if (artStateFilter && r.state !== artStateFilter) return false;
+    if (r.score !== null) {
+      if (r.score < artScoreMin || r.score > artScoreMax) return false;
+    }
+    return true;
+  });
+
+  // Sort
+  filtered.sort(function(a, b) {
+    if (artSortField === 'bankName') return artSortDir === 'asc' ? a.bankName.localeCompare(b.bankName) : b.bankName.localeCompare(a.bankName);
+    if (artSortField === 'state') return artSortDir === 'asc' ? (a.state||'').localeCompare(b.state||'') : (b.state||'').localeCompare(a.state||'');
+    if (artSortField === 'score') return artSortDir === 'asc' ? (a.score||0) - (b.score||0) : (b.score||0) - (a.score||0);
+    if (artSortField === 'events') return artSortDir === 'asc' ? a.events - b.events : b.events - a.events;
+    return 0;
+  });
+
+  if (filtered.length === 0) {
+    return '<div style="text-align:center;padding:32px;color:#8A9099;font-size:12px">No banks match the current filters.</div>';
   }
-  renderARTContent();
+
+  var maxScore = 100;
+  var html = '<div style="font-size:11px;color:#8A9099;margin-bottom:8px">' + filtered.length + ' bank' + (filtered.length !== 1 ? 's' : '') + ' shown</div>';
+  html += '<div class="chart-card" style="padding:0;overflow:hidden">';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:12px">';
+  html += '<thead><tr style="border-bottom:2px solid #E8ECF0">';
+
+  var cols = [
+    {l:'Bank', f:'bankName', a:'left'},
+    {l:'State', f:'state', a:'center'},
+    {l:'Score', f:'score', a:'center'},
+    {l:'Risk', f:'risk', a:'center'},
+    {l:'Views', f:'events', a:'center'}
+  ];
+  cols.forEach(function(col) {
+    var active = artSortField === col.f;
+    var arrow = active ? (artSortDir === 'desc' ? ' ▼' : ' ▲') : '';
+    html += '<th onclick="artSort(\'' + col.f + '\')" style="text-align:' + col.a + ';padding:10px 12px;font-size:10px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;cursor:pointer;color:' + (active ? '#002D72' : '#8A9099') + '">' + col.l + arrow + '</th>';
+  });
+  html += '</tr></thead><tbody>';
+
+  filtered.forEach(function(row, i) {
+    var sc = scoreColor(row.score);
+    var rc = riskColor(row.risk);
+    html += '<tr style="border-bottom:1px solid #F0F2F5;' + (i%2===1?'background:#FAFBFC;':'') + '">';
+
+    // Bank name + cert
+    html += '<td style="padding:9px 12px">';
+    html += '<div style="font-weight:600;color:#1A1A2E">' + row.bankName + '</div>';
+    if (row.cert) html += '<div style="font-size:10px;color:#8A9099">CERT #' + row.cert + '</div>';
+    html += '</td>';
+
+    // State
+    html += '<td style="text-align:center;padding:9px 12px"><span style="font-size:12px;font-weight:700;color:#002D72">' + (row.state || '–') + '</span></td>';
+
+    // Score with mini bar
+    html += '<td style="text-align:center;padding:9px 12px">';
+    if (row.score !== null) {
+      html += '<div style="display:flex;align-items:center;gap:6px;justify-content:center">';
+      html += '<div style="width:48px;height:5px;background:#F0F2F5;border-radius:3px;overflow:hidden"><div style="height:100%;width:' + row.score + '%;background:' + sc + ';border-radius:3px"></div></div>';
+      html += '<span style="font-size:13px;font-weight:700;color:' + sc + '">' + row.score + '</span>';
+      html += '</div>';
+    } else {
+      html += '<span style="color:#D0D5DD">–</span>';
+    }
+    html += '</td>';
+
+    // Risk label
+    html += '<td style="text-align:center;padding:9px 12px">';
+    if (row.risk) {
+      html += '<span style="font-size:10px;font-weight:600;color:' + rc + ';background:' + rc + '14;border-radius:6px;padding:2px 8px">' + row.risk + '</span>';
+    } else {
+      html += '<span style="color:#D0D5DD">–</span>';
+    }
+    html += '</td>';
+
+    // Views
+    html += '<td style="text-align:center;padding:9px 12px;font-weight:700;color:#002D72">' + row.events + '</td>';
+
+    html += '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+  return html;
+}
+
+function artSort(field) {
+  if (artSortField === field) artSortDir = artSortDir === 'desc' ? 'asc' : 'desc';
+  else { artSortField = field; artSortDir = field === 'bankName' || field === 'state' ? 'asc' : 'desc'; }
+  var list = document.getElementById('art-list');
+  if (list) {
+    var byLabel = {};
+    artData.forEach(function(r) {
+      var lbl = r.label || '';
+      if (!byLabel[lbl]) byLabel[lbl] = Object.assign(parseARTLabel(lbl), {events:0, actions:{}});
+      byLabel[lbl].events += (r.events||0);
+    });
+    list.innerHTML = renderARTList(Object.values(byLabel));
+  }
+}
+
+function artSetSearch(val) { artSearch = val; artRefreshList(); }
+function artSetState(val) { artStateFilter = val; artRefreshList(); }
+function artSetScoreMin(val) { artScoreMin = parseInt(val,10)||0; artRefreshList(); }
+function artSetScoreMax(val) { artScoreMax = parseInt(val,10)||100; artRefreshList(); }
+function artResetFilters() { artSearch=''; artStateFilter=''; artScoreMin=0; artScoreMax=100; renderARTContent(); }
+
+function artRefreshList() {
+  var list = document.getElementById('art-list');
+  if (!list || !artData) return;
+  var byLabel = {};
+  artData.forEach(function(r) {
+    var lbl = r.label || '';
+    if (!byLabel[lbl]) byLabel[lbl] = Object.assign(parseARTLabel(lbl), {events:0, actions:{}});
+    byLabel[lbl].events += (r.events||0);
+  });
+  list.innerHTML = renderARTList(Object.values(byLabel));
 }
 
 // ── EXPORT PDF ──
