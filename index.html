@@ -1597,15 +1597,6 @@ function parsePage(p){
   return {tier: tier, cleanTitle: cleanTitle};
 }
 
-function getFilteredPages(c){
-  return Object.values(c.pages).map(function(p){
-    var parsed = parsePage(p);
-    if(!parsed) return null;
-    if(contactTierFilter.length && contactTierFilter.indexOf(parsed.tier) === -1) return null;
-    if(contactPageSearch && parsed.cleanTitle.toLowerCase().indexOf(contactPageSearch) === -1) return null;
-    return parsed;
-  }).filter(Boolean);
-}
 
 function renderContactsTab(){
   var el = document.getElementById("tab-contacts");
@@ -1614,7 +1605,9 @@ function renderContactsTab(){
 
   // Tier filter pills
   var tierColors = {'Deep Read':CL.blue,'Deep Listen':CL.blue,'Skim':'#D4A017','Bounce':CL.red,'Listener':CL.blue};
-  var pillsHtml = CONTENT_TIERS.map(function(t){
+  var allPillActive = contactTierFilter.length === 0;
+  var pillsHtml = '<span onclick="clearContactTiers()" style="cursor:pointer;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;border:1px solid '+(allPillActive?'#002D7255':'#E8ECF0')+';background:'+(allPillActive?'#002D7218':'#fff')+';color:'+(allPillActive?CL.navy:'#8A9099')+';transition:all .15s">All</span>';
+  pillsHtml += CONTENT_TIERS.map(function(t){
     var active = contactTierFilter.length === 0 || contactTierFilter.indexOf(t) > -1;
     var col = tierColors[t] || '#8A9099';
     var bg = active ? col+'18' : '#F5F7FA';
@@ -1625,7 +1618,7 @@ function renderContactsTab(){
 
   var html = '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">';
   html += '<div class="chart-title" style="margin-bottom:0">Identified Contacts</div>';
-  html += '<input type="text" id="contacts-search" placeholder="Filter by page title..." oninput="setContactPageSearch(this.value)" style="padding:5px 10px;border-radius:8px;border:1px solid #E8ECF0;font-size:12px;font-family:inherit;color:#1A1A2E;outline:none;width:220px">';
+  html += '<input type="text" id="contacts-search" placeholder="Search by page or Salesforce ID..." oninput="setContactPageSearch(this.value)" style="padding:5px 10px;border-radius:8px;border:1px solid #E8ECF0;font-size:12px;font-family:inherit;color:#1A1A2E;outline:none;width:260px">';
   html += '</div>';
   html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px">';
   html += '<span style="font-size:11px;color:#8A9099;margin-right:2px">Engagement:</span>';
@@ -1736,6 +1729,18 @@ function setContactPageSearch(val){
   contactPageSearch = val.toLowerCase().trim();
   var list = document.getElementById("contacts-list");
   if(list) list.innerHTML = renderContactRows();
+}
+
+function getFilteredPages(c){
+  return Object.values(c.pages).map(function(p){
+    var parsed = parsePage(p);
+    if(!parsed) return null;
+    if(contactTierFilter.length && contactTierFilter.indexOf(parsed.tier) === -1) return null;
+    // Page search matches page title OR sfId
+    if(contactPageSearch && parsed.cleanTitle.toLowerCase().indexOf(contactPageSearch) === -1
+       && c.sfId.toLowerCase().indexOf(contactPageSearch) === -1) return null;
+    return parsed;
+  }).filter(Boolean);
 }
 
 
