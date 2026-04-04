@@ -144,7 +144,7 @@ tbody tr:nth-child(even){background:#FAFBFC}
 
   <!-- Tabs -->
   <div id="tabs-bar" class="tabs">
-    <button class="tab active" data-tab="overview">Overview</button>
+    <button class="tab active" data-tab="contacts">Contacts</button>
     <button class="tab" data-tab="content">Content</button>
     <button class="tab" data-tab="insights">Performance</button>
     <button class="tab" data-tab="engagement">Activity</button>
@@ -152,12 +152,11 @@ tbody tr:nth-child(even){background:#FAFBFC}
     <button class="tab" data-tab="leaderboard">Trending</button>
     <button class="tab" data-tab="companies">Companies</button>
     <button class="tab" data-tab="map">Map</button>
-    <button class="tab" data-tab="contacts">Contacts</button>
     <button class="tab" data-tab="art">Acq Risk Tool</button>
   </div>
 
   <!-- Tab Panels -->
-  <div id="tab-overview"></div>
+  <div id="tab-contacts"></div>
   <div id="tab-content" class="hidden"></div>
   <div id="tab-insights" class="hidden"></div>
   <div id="tab-engagement" class="hidden"></div>
@@ -165,7 +164,6 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div id="tab-leaderboard" class="hidden"></div>
   <div id="tab-companies" class="hidden"></div>
   <div id="tab-map" class="hidden"></div>
-  <div id="tab-contacts" class="hidden"></div>
   <div id="tab-art" class="hidden"></div>
 
   <div class="footer" id="footer">CommandBar Analytics Dashboard v2.5.4 · Powered by SiteImprove Events + Leadfeeder · SouthState Correspondent</div>
@@ -177,7 +175,7 @@ let RAW_DATA = [];
 let RAW_DATA_ALL = [];
 let PERIOD = "";
 let hasData = false;
-let currentTab = "overview";
+let currentTab = "contacts";
 let contentSortField = "total";
 let contentSortDir = "desc";
 let contentShowAll = false;
@@ -482,8 +480,6 @@ function render(){
 
   document.getElementById("period-label").textContent=(PERIOD?PERIOD+" \u00b7 ":"")+"SouthState Correspondent";
 
-  renderOverview(d);
-
   // ── ENGAGEMENT TAB ──
   let ehtml=`<div class="cards">${card("Daily Visitors",d.dailyVisits,d.dailyVisitors+" unique sessions",CL.blue)}${card("Rail Opens",d.railOpens,engRate+"% of visitors",CL.gold)}${card("Total Actions",d.actionsTotal,d.clickTotal+" clicks, "+d.saveTotal+" saves, "+d.shareTotal+" shares",CL.green)}${card("Nudges Shown",d.nudgeShown,d.nudgeDismiss+" dismissed",CL.navy)}</div>`;
   ehtml+=`<div class="charts">`;
@@ -707,17 +703,14 @@ function render(){
   document.getElementById("tab-leaderboard").innerHTML=lhtml;
   if(histData)renderLeaderboard();
 
-  // ── COMPANIES TAB ──
-  renderCompaniesTab();
+  // ── COMPANIES TAB ── only render shell if currently active
+  if(currentTab==="companies") renderCompaniesTab();
 
-  // ── MAP TAB ──
-  renderMapTab();
+  // ── MAP TAB ── only render shell if currently active
+  if(currentTab==="map") renderMapTab();
 
-  // Auto-load background tabs
-  fetchLfFeeds();
-  if(!companiesData) setTimeout(fetchCompanies, 400);
-  if(!histData) setTimeout(fetchHistorical, 200);
   buildContactsIndex();
+  if(currentTab==="contacts") renderContactsTab();
 }
 
 // ── COMPANIES TAB RENDER ──
@@ -802,8 +795,6 @@ async function fetchCompanies(){
       pg++;
     }
     companiesData=allLeads;
-    if(hasData){var dov=process(RAW_DATA);renderOverview(dov);}
-
     var feedLabel=currentLfFeed?" · "+lfFeedName(currentLfFeed):"";
     if(status)status.innerHTML='<span style="color:#2E7D32">'+allLeads.length+' companies loaded'+feedLabel+'.</span>';
     renderCompaniesTable();
@@ -1447,18 +1438,25 @@ document.querySelectorAll("#tabs-bar .tab").forEach(btn=>{
     document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
     btn.classList.add("active");
     currentTab=btn.dataset.tab;
-    ["overview","content","insights","engagement","historical","leaderboard","companies","map","contacts","art"].forEach(t=>{
+    ["contacts","content","insights","engagement","historical","leaderboard","companies","map","art"].forEach(t=>{
       document.getElementById("tab-"+t).classList.toggle("hidden",t!==currentTab);
     });
-    if((currentTab==="historical"||currentTab==="leaderboard")&&!histData){setTimeout(fetchHistorical,100);}
-    if(currentTab==="leaderboard"&&histData){renderLeaderboard();}
+    if(currentTab==="content"||currentTab==="insights"||currentTab==="engagement"){
+      // These render from RAW_DATA — just re-render if data exists
+      if(hasData) render();
+    }
+    if(currentTab==="historical"||currentTab==="leaderboard"){
+      if(!histData) setTimeout(fetchHistorical,100);
+      else if(currentTab==="leaderboard") renderLeaderboard();
+      else renderHistoricalCharts();
+    }
     if(currentTab==="companies"){
-      if(!companiesData){setTimeout(fetchCompanies,100);}
-      else{renderCompaniesTable();}
+      if(!companiesData) setTimeout(fetchCompanies,100);
+      else renderCompaniesTable();
     }
     if(currentTab==="map"){
-      if(!companiesData){setTimeout(fetchMapData,100);}
-      else if(mapStateData){renderUSMap();}
+      if(!companiesData) setTimeout(fetchMapData,100);
+      else if(mapStateData) renderUSMap();
     }
     if(currentTab==="contacts"){
       renderContactsTab();
@@ -1574,8 +1572,9 @@ async function fetchAPI(){
     render();
     buildContactsIndex();
     if(currentTab==="contacts") renderContactsTab();
-    setTimeout(fetchART, 600);
-    setTimeout(fetchCompanies, 800);
+    if(currentTab==="art"){ renderARTTab(); setTimeout(fetchART, 300); }
+    if(currentTab==="companies") setTimeout(fetchCompanies, 300);
+    if(currentTab==="map") setTimeout(fetchMapData, 300);
   }catch(err){
     console.error("API fetch error:",err);
     document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>Fetch failed: '+err.message+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
@@ -2157,8 +2156,8 @@ async function exportPDF(){
     function drawFooter(n){pdf.setFont("helvetica","normal");pdf.setFontSize(7);pdf.setTextColor(138,144,153);pdf.text("CommandBar Analytics Dashboard v2.6.0 · SiteImprove Events",margin,ph-5);pdf.text("Page "+n,pw-margin,ph-5,{align:"right"});}
     function addPage(title,contd){if(pageCount>0)pdf.addPage();pageCount++;drawHeader(title,contd||false);drawFooter(pageCount);}
     async function captureAndAdd(el,tabName){const canvas=await html2canvas(el,{scale:2,backgroundColor:"#F5F7FA",useCORS:true,logging:false,windowWidth:980});const imgData=canvas.toDataURL("image/jpeg",0.92);const imgW=contentW;const imgH=(canvas.height/canvas.width)*contentW;const finalH=Math.min(imgH,availH);const finalW=imgH>availH?(availH/imgH)*imgW:imgW;const xOff=margin+(contentW-finalW)/2;addPage(tabName);pdf.addImage(imgData,"JPEG",xOff,headerH,finalW,finalH);}
-    const tabs=["overview","content","insights","engagement","historical","leaderboard","companies","map"];
-    const tabNames=["Overview","Content","Performance","Activity","Compare","Trending","Companies","Map"];
+    const tabs=["content","insights","engagement","historical","leaderboard","companies","map","art"];
+    const tabNames=["Content","Performance","Activity","Compare","Trending","Companies","Map","Acq Risk Tool"];
     const savedTab=currentTab;
     for(let i=0;i<tabs.length;i++){
       tabs.forEach(t=>{const el=document.getElementById("tab-"+t);el.style.display=t===tabs[i]?"block":"none";el.classList.remove("hidden");});
@@ -2171,7 +2170,7 @@ async function exportPDF(){
   }catch(err){
     console.error("PDF export error:",err);
     document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>PDF export failed: '+err.message+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
-    ["overview","content","insights","engagement","historical","leaderboard","companies","map","contacts","art"].forEach(t=>{const el=document.getElementById("tab-"+t);el.style.display="";el.classList.toggle("hidden",t!==currentTab);});
+    ["contacts","content","insights","engagement","historical","leaderboard","companies","map","art"].forEach(t=>{const el=document.getElementById("tab-"+t);el.style.display="";el.classList.toggle("hidden",t!==currentTab);});
   }
   btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";
 }
