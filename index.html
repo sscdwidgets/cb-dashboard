@@ -1473,36 +1473,104 @@ document.querySelectorAll("#tabs-bar .tab").forEach(btn=>{
 // ── API FETCH ──
 const WORKER_URL = "https://siteimprove-proxy.jameswspence.workers.dev";
 
+// Split a date range into weekly chunks, returns array of {from, to} strings (YYYYMMDD)
+function splitIntoWeeks(fromStr, toStr) {
+  var chunks = [];
+  var cur = new Date(fromStr.slice(0,4)+'-'+fromStr.slice(4,6)+'-'+fromStr.slice(6,8)+'T12:00:00');
+  var end = new Date(toStr.slice(0,4)+'-'+toStr.slice(4,6)+'-'+toStr.slice(6,8)+'T12:00:00');
+  var fmt = function(d){ return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0'); };
+  while(cur <= end) {
+    var chunkEnd = new Date(cur);
+    chunkEnd.setDate(chunkEnd.getDate() + 6);
+    if(chunkEnd > end) chunkEnd = new Date(end);
+    chunks.push({from: fmt(cur), to: fmt(chunkEnd)});
+    cur.setDate(cur.getDate() + 7);
+  }
+  return chunks;
+}
+
+// Merge event rows from multiple fetches, summing events for duplicate action+label combos
+function mergeEventRows(allArrays) {
+  var merged = {};
+  allArrays.forEach(function(arr) {
+    (arr || []).forEach(function(row) {
+      var key = (row.category||'') + '|' + (row.action||'') + '|' + (row.label||'');
+      if(!merged[key]) merged[key] = {category:row.category, action:row.action, label:row.label, events:0, visits:0};
+      merged[key].events += (row.events||0);
+      merged[key].visits += (row.visits||0);
+    });
+  });
+  return Object.values(merged);
+}
+
 async function fetchAPI(){
   const fromEl=document.getElementById("date-from");
   const toEl=document.getElementById("date-to");
   const btn=document.getElementById("fetch-btn");
-  if(!fromEl.value||!toEl.value){document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>Select both start and end dates.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';return;}
+  const msgEl=document.getElementById("import-msg");
+  if(!fromEl.value||!toEl.value){msgEl.innerHTML='<div class="import-msg error"><span>Select both start and end dates.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';return;}
   const from=fromEl.value.replace(/-/g,"");const to=toEl.value.replace(/-/g,"");
-  if(from>to){document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>Start date must be before end date.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';return;}
+  if(from>to){msgEl.innerHTML='<div class="import-msg error"><span>Start date must be before end date.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';return;}
   const origText=btn.innerHTML;btn.innerHTML="Fetching...";btn.style.opacity=".6";btn.style.pointerEvents="none";
-  document.getElementById("import-msg").innerHTML="";
+  msgEl.innerHTML="";
   try{
+    // ── First: try the full range in one shot ──
     const url=WORKER_URL+"?period="+from+"_"+to+"&page_size=1000";
     const resp=await fetch(url, { cache: 'no-store' });
     if(!resp.ok){const err=await resp.text();throw new Error("API returned "+resp.status+": "+err);}
     const result=await resp.json();
     if(result.error){throw new Error(result.error+(result.detail?" — "+result.detail:""));}
-    if(!result.data||result.data.length===0){document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>No CommandBar events found for this date range.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";return;}
-    RAW_DATA=result.data;
-    RAW_DATA_ALL=result.allRows||result.data;
+
+    let allData = result.data || [];
+    let truncatedWeeks = 0;
+
+    // ── If exactly 1000 rows returned, range was truncated — chunk by week ──
+    if(allData.length === 1000) {
+      btn.innerHTML="Chunking...";
+      msgEl.innerHTML='<div class="import-msg success" style="background:#0960BB14;color:#0960BB"><span>Range too large — fetching by week...</span></div>';
+      const weeks = splitIntoWeeks(from, to);
+      const chunkFetches = weeks.map(function(w){
+        var wUrl = WORKER_URL+"?period="+w.from+"_"+w.to+"&page_size=1000&category=CommandBar";
+        return fetch(wUrl, {cache:'no-store'})
+          .then(function(r){return r.json();})
+          .then(function(r){return r.data||[];})
+          .catch(function(){return [];});
+      });
+      const chunkResults = await Promise.all(chunkFetches);
+      allData = mergeEventRows(chunkResults);
+      // If any individual week still hit 1000, warn but proceed
+      var truncatedWeeksCount = chunkResults.filter(function(r){return r.length>=1000;}).length;
+      truncatedWeeks = truncatedWeeksCount;
+      if(truncatedWeeks > 0){
+        msgEl.innerHTML='<div class="import-msg error"><span>Warning: '+truncatedWeeks+' week(s) may still be truncated at 1000 events. Consider a narrower date range.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
+      }
+    }
+
+    if(!allData.length){
+      msgEl.innerHTML='<div class="import-msg error"><span>No CommandBar events found for this date range.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
+      btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";
+      return;
+    }
+
+    // Filter to CommandBar only for main RAW_DATA (other categories handled by their own fetches)
+    RAW_DATA = allData.filter(function(r){return r.category==="CommandBar";});
+    RAW_DATA_ALL = allData;
     companiesData=null;
     mapStateData=null;
     mapCurrentView="us";
     companyPagesCache={};
     histData=null;
     artData=null;
-    RAW_DATA_ALL=[];
+
     const fd=fromEl.value,td=toEl.value;
     const fmtDate=function(d){var p=d.split("-");var m=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];return m[parseInt(p[1],10)-1]+" "+parseInt(p[2],10)+", "+p[0]};
     PERIOD=fmtDate(fd)+(fd===td?"":" \u2013 "+fmtDate(td));
     hasData=true;
-    document.getElementById("import-msg").innerHTML='<div class="import-msg success"><span>'+result.data.length+' events loaded via API for '+PERIOD+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
+
+    var chunkNote = allData.length !== (result.data||[]).length ? ' (chunked across '+splitIntoWeeks(from,to).length+' weeks)' : '';
+    if(!truncatedWeeks) {
+      msgEl.innerHTML='<div class="import-msg success"><span>'+RAW_DATA.length+' CommandBar events loaded for '+PERIOD+chunkNote+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
+    }
     render();
     buildContactsIndex();
     if(currentTab==="contacts") renderContactsTab();
@@ -1514,6 +1582,7 @@ async function fetchAPI(){
   }
   btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";
 }
+
 
 // ── DATE DEFAULTS + AUTO-FETCH ──
 (function(){
