@@ -1471,8 +1471,35 @@ document.querySelectorAll("#tabs-bar .tab").forEach(btn=>{
 // ── API FETCH ──
 const WORKER_URL = "https://siteimprove-proxy.jameswspence.workers.dev";
 
-// Split a date range into weekly chunks, returns array of {from, to} strings (YYYYMMDD)
-function splitIntoWeeks(fromStr, toStr) {
+// Shared: fetch a date range with auto-chunking if truncated
+async function fetchSiteImproveRange(fromStr, toStr, category, statusCb) {
+  var catParam = category ? "&category=" + encodeURIComponent(category) : "";
+  var url = WORKER_URL + "?period=" + fromStr + "_" + toStr + "&page_size=1000" + catParam;
+  var resp = await fetch(url, { cache: 'no-store' });
+  var result = await resp.json();
+  if (result.error) throw new Error(result.error + (result.detail ? " — " + result.detail : ""));
+  var data = result.data || [];
+
+  if (data.length === 1000) {
+    // Truncated — chunk by week and fetch in parallel
+    if (statusCb) statusCb("Range too large, fetching by week...");
+    var weeks = splitIntoWeeks(fromStr, toStr);
+    var chunkFetches = weeks.map(function(w) {
+      var wUrl = WORKER_URL + "?period=" + w.from + "_" + w.to + "&page_size=1000" + catParam;
+      return fetch(wUrl, { cache: 'no-store' })
+        .then(function(r) { return r.json(); })
+        .then(function(r) { return r.data || []; })
+        .catch(function() { return []; });
+    });
+    var chunkResults = await Promise.all(chunkFetches);
+    data = mergeEventRows(chunkResults);
+    var truncatedWeeks = chunkResults.filter(function(r) { return r.length >= 1000; }).length;
+    if (truncatedWeeks > 0 && statusCb) {
+      statusCb("Warning: " + truncatedWeeks + " week(s) may still be truncated. Narrow the date range.");
+    }
+  }
+  return data;
+}
   var chunks = [];
   var cur = new Date(fromStr.slice(0,4)+'-'+fromStr.slice(4,6)+'-'+fromStr.slice(6,8)+'T12:00:00');
   var end = new Date(toStr.slice(0,4)+'-'+toStr.slice(4,6)+'-'+toStr.slice(6,8)+'T12:00:00');
@@ -1512,63 +1539,29 @@ async function fetchAPI(){
   const origText=btn.innerHTML;btn.innerHTML="Fetching...";btn.style.opacity=".6";btn.style.pointerEvents="none";
   msgEl.innerHTML="";
   try{
-    // ── First: try the full range in one shot ──
-    const url=WORKER_URL+"?period="+from+"_"+to+"&page_size=1000";
-    const resp=await fetch(url, { cache: 'no-store' });
-    if(!resp.ok){const err=await resp.text();throw new Error("API returned "+resp.status+": "+err);}
-    const result=await resp.json();
-    if(result.error){throw new Error(result.error+(result.detail?" — "+result.detail:""));}
-
-    let allData = result.data || [];
-    let truncatedWeeks = 0;
-
-    // ── If exactly 1000 rows returned, range was truncated — chunk by week ──
-    if(allData.length === 1000) {
+    btn.innerHTML="Fetching...";
+    const allData = await fetchSiteImproveRange(from, to, null, function(msg){
+      msgEl.innerHTML='<div class="import-msg success" style="background:#0960BB14;color:#0960BB"><span>'+msg+'</span></div>';
       btn.innerHTML="Chunking...";
-      msgEl.innerHTML='<div class="import-msg success" style="background:#0960BB14;color:#0960BB"><span>Range too large — fetching by week...</span></div>';
-      const weeks = splitIntoWeeks(from, to);
-      const chunkFetches = weeks.map(function(w){
-        var wUrl = WORKER_URL+"?period="+w.from+"_"+w.to+"&page_size=1000&category=CommandBar";
-        return fetch(wUrl, {cache:'no-store'})
-          .then(function(r){return r.json();})
-          .then(function(r){return r.data||[];})
-          .catch(function(){return [];});
-      });
-      const chunkResults = await Promise.all(chunkFetches);
-      allData = mergeEventRows(chunkResults);
-      // If any individual week still hit 1000, warn but proceed
-      var truncatedWeeksCount = chunkResults.filter(function(r){return r.length>=1000;}).length;
-      truncatedWeeks = truncatedWeeksCount;
-      if(truncatedWeeks > 0){
-        msgEl.innerHTML='<div class="import-msg error"><span>Warning: '+truncatedWeeks+' week(s) may still be truncated at 1000 events. Consider a narrower date range.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
-      }
-    }
+    });
 
     if(!allData.length){
-      msgEl.innerHTML='<div class="import-msg error"><span>No CommandBar events found for this date range.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
+      msgEl.innerHTML='<div class="import-msg error"><span>No events found for this date range.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
       btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";
       return;
     }
 
-    // Filter to CommandBar only for main RAW_DATA (other categories handled by their own fetches)
-    RAW_DATA = allData.filter(function(r){return r.category==="CommandBar";});
+    RAW_DATA = allData.filter(function(r){ return r.category==="CommandBar"; });
     RAW_DATA_ALL = allData;
-    companiesData=null;
-    mapStateData=null;
-    mapCurrentView="us";
-    companyPagesCache={};
-    histData=null;
-    artData=null;
+    companiesData=null; mapStateData=null; mapCurrentView="us";
+    companyPagesCache={}; histData=null; artData=null;
 
-    const fd=fromEl.value,td=toEl.value;
+    const fd=fromEl.value, td=toEl.value;
     const fmtDate=function(d){var p=d.split("-");var m=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];return m[parseInt(p[1],10)-1]+" "+parseInt(p[2],10)+", "+p[0]};
     PERIOD=fmtDate(fd)+(fd===td?"":" \u2013 "+fmtDate(td));
     hasData=true;
 
-    var chunkNote = allData.length !== (result.data||[]).length ? ' (chunked across '+splitIntoWeeks(from,to).length+' weeks)' : '';
-    if(!truncatedWeeks) {
-      msgEl.innerHTML='<div class="import-msg success"><span>'+RAW_DATA.length+' CommandBar events loaded for '+PERIOD+chunkNote+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
-    }
+    msgEl.innerHTML='<div class="import-msg success"><span>'+RAW_DATA.length+' CommandBar events loaded for '+PERIOD+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';
     render();
     buildContactsIndex();
     if(currentTab==="contacts") renderContactsTab();
@@ -1828,13 +1821,9 @@ async function fetchART() {
   if (status) status.textContent = "Fetching Acquisition Risk Tool events...";
 
   try {
-    var url = WORKER_URL + "?period=" + startDate + "_" + endDate
-      + "&category=" + encodeURIComponent(ART_CATEGORY)
-      + "&page_size=1000";
-    var resp = await fetch(url, { cache: 'no-store' });
-    var result = await resp.json();
-    if (result.error) throw new Error(result.error + (result.detail ? " — " + result.detail : ""));
-    artData = result.data || [];
+    artData = await fetchSiteImproveRange(startDate, endDate, ART_CATEGORY, function(msg){
+      if(status) status.textContent = msg;
+    });
     if (status) status.innerHTML = '<span style="color:#2E7D32">' + artData.length + ' rows loaded for "' + ART_CATEGORY + '".</span>';
     renderARTContent();
   } catch (err) {
