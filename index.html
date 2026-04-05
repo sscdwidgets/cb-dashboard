@@ -210,7 +210,7 @@ function renderMapTab(){var mhtml='<div style="display:flex;gap:0;border-radius:
 // ── COMPANIES ──
 var companiesData=null;var INTERNAL_NAMES=["SouthState Bank","SouthState Securities","First Federal","SouthState Correspondent"];
 function lfLeadsUrl(page,startDate,endDate){var base=currentLfFeed?LF_URL+"/feeds/"+currentLfFeed+"/leads":LF_URL+"/leads";return base+"?start_date="+startDate+"&end_date="+endDate+"&page="+page+"&page_size=100";}
-async function fetchCompanies(){var btn=document.getElementById("co-fetch-btn");var status=document.getElementById("co-status");var fromEl=document.getElementById("date-from");var toEl=document.getElementById("date-to");var startDate=fromEl&&fromEl.value?fromEl.value:defaultDateStr(-6);var endDate=toEl&&toEl.value?toEl.value:defaultDateStr(0);if(btn){btn.innerHTML="Loading...";btn.style.opacity=".6";btn.style.pointerEvents="none";}if(status)status.textContent="Fetching companies"+(currentLfFeed?" for feed: "+lfFeedName(currentLfFeed):"")+"...";try{var allLeads=[],pg=1,more=true;while(more&&pg<=5){if(status)status.textContent="Fetching page "+pg+"...";var resp=await fetch(lfLeadsUrl(pg,startDate,endDate),{cache:'no-store'});var result=await resp.json();if(result.error)throw new Error(result.error);allLeads=allLeads.concat(result.data||[]);more=(result.data||[]).length>=100;pg++;}companiesData=allLeads;var feedLabel=currentLfFeed?" \u00b7 "+lfFeedName(currentLfFeed):"";if(status)status.innerHTML='<span style="color:#2E7D32">'+allLeads.length+' companies loaded'+feedLabel+'.</span>';renderCompaniesTable();buildMapStateData();}catch(err){if(status)status.innerHTML='<span style="color:#E53935">Failed: '+err.message+'</span>';}if(btn){btn.innerHTML="Reload";btn.style.opacity="1";btn.style.pointerEvents="auto";}}
+async function fetchCompanies(){var btn=document.getElementById("co-fetch-btn");var status=document.getElementById("co-status");var fromEl=document.getElementById("date-from");var toEl=document.getElementById("date-to");var startDate=fromEl&&fromEl.value?fromEl.value:defaultDateStr(-6);var endDate=toEl&&toEl.value?toEl.value:defaultDateStr(0);if(btn){btn.innerHTML="Loading...";btn.style.opacity=".6";btn.style.pointerEvents="none";}if(status)status.textContent=randomLoadingMsg();try{var allLeads=[],pg=1,more=true;while(more&&pg<=5){if(status)status.textContent=randomLoadingMsg()+" (page "+pg+")";var resp=await fetch(lfLeadsUrl(pg,startDate,endDate),{cache:'no-store'});var result=await resp.json();if(result.error)throw new Error(result.error);allLeads=allLeads.concat(result.data||[]);more=(result.data||[]).length>=100;pg++;}companiesData=allLeads;var feedLabel=currentLfFeed?" \u00b7 "+lfFeedName(currentLfFeed):"";if(status)status.innerHTML='<span style="color:#2E7D32">'+allLeads.length+' companies loaded'+feedLabel+'.</span>';renderCompaniesTable();buildMapStateData();}catch(err){if(status)status.innerHTML='<span style="color:#E53935">Failed: '+err.message+'</span>';}if(btn){btn.innerHTML="Reload";btn.style.opacity="1";btn.style.pointerEvents="auto";}}
 function lfFeedName(id){var f=lfFeeds.find(function(f){return f.id===id;});return f?f.name:id;}
 function setQuickDate(range){var today=new Date();var from=new Date(today);if(range==='7d'){from.setDate(today.getDate()-6);}else if(range==='month'){from=new Date(today.getFullYear(),today.getMonth(),1);}else if(range==='quarter'){var q=Math.floor(today.getMonth()/3);from=new Date(today.getFullYear(),q*3,1);}else if(range==='year'){from=new Date(today.getFullYear(),0,1);}var fmt=function(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};document.getElementById('date-from').value=fmt(from);document.getElementById('date-to').value=fmt(today);document.querySelectorAll('.date-quick').forEach(function(b){b.classList.remove('active');});var map={'7d':0,'month':1,'quarter':2,'year':3};var btns=document.querySelectorAll('.date-quick');if(btns[map[range]])btns[map[range]].classList.add('active');}
 function defaultDateStr(offset){var d=new Date();d.setDate(d.getDate()+offset);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
@@ -238,6 +238,28 @@ function renderCityCompanies(container,sc,city){var sd=mapStateData[sc];if(!sd||
 function mapGoBack(){if(mapCurrentView==="city"){mapCurrentView="state";mapCurrentCity="";}else if(mapCurrentView==="state"){mapCurrentView="us";mapCurrentState="";}renderUSMap();}
 // ── TAB SWITCHING ──
 document.querySelectorAll("#tabs-bar .tab").forEach(btn=>{btn.addEventListener("click",()=>{document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));btn.classList.add("active");currentTab=btn.dataset.tab;["contacts","companies","map","art"].forEach(t=>{document.getElementById("tab-"+t).classList.toggle("hidden",t!==currentTab);});if(currentTab==="companies"){renderCompaniesTab();if(!companiesData)setTimeout(fetchCompanies,100);}if(currentTab==="map"){renderMapTab();if(!companiesData)setTimeout(fetchMapData,100);}if(currentTab==="contacts"){renderContactsTab();}if(currentTab==="art"){renderARTTab();if(!artData)setTimeout(fetchART,100);}});});
+// ── LOADING MESSAGES ──
+var LOADING_MSGS=[
+  "James is squinting at a spreadsheet somewhere...",
+  "Geoff is negotiating with the SiteImprove API...",
+  "James and Geoff are arguing about which leads are hottest...",
+  "Geoff just spilled coffee on the analytics server...",
+  "James is doing that thing where he stares at data until it confesses...",
+  "Geoff is sweet-talking Leadfeeder into sharing...",
+  "James found a lead. Wait, that was his lunch order...",
+  "Geoff is running the numbers. James is running for coffee...",
+  "James and Geoff: turning clicks into conversations since 2026...",
+  "Geoff is whispering to the database. It's working...",
+  "James just high-fived a conversion event...",
+  "Hold tight \u2014 James is untangling the spaghetti of event labels...",
+  "Geoff is politely asking SiteImprove to hurry up...",
+  "James and Geoff are crunching numbers like it's leg day...",
+  "Geoff found a Champion contact. James wants to name it...",
+  "James is teaching the dashboard to fetch. Good dashboard...",
+];
+var lastLoadingIdx=-1;
+function randomLoadingMsg(){var idx;do{idx=Math.floor(Math.random()*LOADING_MSGS.length);}while(idx===lastLoadingIdx&&LOADING_MSGS.length>1);lastLoadingIdx=idx;return LOADING_MSGS[idx];}
+
 // ── API FETCH ──
 const WORKER_URL = "https://siteimprove-proxy.jameswspence.workers.dev";
 async function fetchSiteImproveRange(fromStr, toStr, category, statusCb) {
@@ -263,16 +285,16 @@ async function fetchSiteImproveRange(fromStr, toStr, category, statusCb) {
   }
 
   if (days.length === 1) {
-    if (statusCb) statusCb("Fetching...");
+    if (statusCb) statusCb(randomLoadingMsg());
     return await fetchDay(days[0]);
   }
 
-  if (statusCb) statusCb("Fetching " + days.length + " days...");
+  if (statusCb) statusCb(randomLoadingMsg());
   var allChunkResults = [];
   var batchSize = 7;
   for (var b = 0; b < days.length; b += batchSize) {
     var batch = days.slice(b, b + batchSize);
-    if (statusCb) statusCb("Fetching days " + (b + 1) + "-" + Math.min(b + batchSize, days.length) + " of " + days.length + "...");
+    if (statusCb) statusCb(randomLoadingMsg() + " (" + (b + 1) + "-" + Math.min(b + batchSize, days.length) + " of " + days.length + " days)");
     var batchFetches = batch.map(function(day) {
       return fetchDay(day).catch(function() { return []; });
     });
@@ -315,15 +337,19 @@ var CONTENT_TIERS=['Deep Read','Deep Listen','Skim','Bounce','Listener'];var con
 function parsePage(p){var tierMatch=p.label.match(/^(Deep Read|Deep Listen|Skim|Bounce|Listener|Impression|Daily Visit|Open):\s*/i);var tier=tierMatch?tierMatch[1]:(Object.keys(p.actions)[0]||'');if(/^(Impression|Daily Visit|Open)$/i.test(tier))return null;var cleanTitle=tierMatch?p.label.slice(tierMatch[0].length):p.label;cleanTitle=cleanTitle.replace(/\s*\|\s*sfc:[A-Za-z0-9]+$/,'').replace(/\s*\|\s*ts:\d+/,'').trim();if(/^pip$/i.test(cleanTitle))return null;return{tier:tier,cleanTitle:cleanTitle,ts:p.ts||null};}
 function renderContactsTab(){var el=document.getElementById("tab-contacts");if(!el)return;var noData=!RAW_DATA||!RAW_DATA.length;
 var html='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px"><div class="chart-title" style="margin-bottom:0">Identified Contacts</div><input type="text" id="contacts-search" placeholder="Search by page or Salesforce ID..." oninput="setContactPageSearch(this.value)" style="padding:5px 10px;border-radius:8px;border:1px solid #E8ECF0;font-size:12px;font-family:inherit;color:#1A1A2E;outline:none;width:260px"></div>';if(noData){html+='<div style="padding:40px;text-align:center;color:#8A9099;font-size:13px">Fetch data first to identify contacts.</div>';}else{html+='<div id="contacts-list">'+renderContactRows()+'</div>';}el.innerHTML=html;}
-function renderContactRows(){var contacts=Object.values(contactsIndex);contacts.sort(function(a,b){return b.totalEvents-a.totalEvents;});var filtered=contacts.map(function(c){return{c:c,pages:getFilteredPages(c)};}).filter(function(item){return item.pages.length>0;});if(filtered.length===0){return'<div style="padding:40px;text-align:center;color:#8A9099;font-size:13px">No contacts match the current filters.</div>';}var html='<div style="font-size:11px;color:#8A9099;margin-bottom:8px">'+filtered.length+' contact'+(filtered.length!==1?'s':'')+' identified</div>';html+='<table style="width:100%;border-collapse:collapse"><thead><tr style="background:#F5F7FA">';["Salesforce ID","Content Viewed",""].forEach(function(h){html+='<th style="text-align:left;padding:8px 12px;font-size:10px;font-weight:700;color:#8A9099;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">'+h+'</th>';});html+='</tr></thead><tbody>';
+function renderContactRows(){var contacts=Object.values(contactsIndex);contacts.sort(function(a,b){return b.totalEvents-a.totalEvents;});var filtered=contacts.map(function(c){return{c:c,pages:getFilteredPages(c)};}).filter(function(item){return item.pages.length>0;});if(filtered.length===0){return'<div style="padding:40px;text-align:center;color:#8A9099;font-size:13px">No contacts match the current filters.</div>';}
+// Calculate date range in days for score normalization
+var fromVal=document.getElementById("date-from").value;var toVal=document.getElementById("date-to").value;var rangeDays=1;if(fromVal&&toVal){var d1=new Date(fromVal+"T12:00:00");var d2=new Date(toVal+"T12:00:00");rangeDays=Math.max(1,Math.round((d2-d1)/(86400000))+1);}var rangeWeeks=Math.max(1,rangeDays/7);
+var html='<div style="font-size:11px;color:#8A9099;margin-bottom:8px">'+filtered.length+' contact'+(filtered.length!==1?'s':'')+' identified</div>';html+='<table style="width:100%;border-collapse:collapse"><thead><tr style="background:#F5F7FA">';["Salesforce ID","Content Viewed",""].forEach(function(h){html+='<th style="text-align:left;padding:8px 12px;font-size:10px;font-weight:700;color:#8A9099;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">'+h+'</th>';});html+='</tr></thead><tbody>';
 filtered.forEach(function(item,i){var c=item.c;var pages=item.pages;var sfUrl="https://southstatecorrespondent.lightning.force.com/"+c.sfId;var rowBg=i%2===0?"#fff":"#F8F9FC";var pagesId="ct-pages-"+i;
-// Contact-level engagement score: weight each page interaction
-var engScore=0;pages.forEach(function(p){var t=p.tier.toLowerCase();if(t==='deep read'||t==='deep listen')engScore+=3;else if(t==='listener')engScore+=2;else if(t==='skim')engScore+=1;else if(t==='bounce')engScore+=0;});
-// Scale: Champion (10+), Active (5-9), Exploring (2-4), Passing (0-1)
+// Contact-level engagement score: weight each page interaction, normalize to weekly rate
+var engScore=0;pages.forEach(function(p){var t=p.tier.toLowerCase();if(t==='deep read'||t==='deep listen')engScore+=3;else if(t==='listener')engScore+=2;else if(t==='skim')engScore+=1;});
+var weeklyRate=engScore/rangeWeeks;
+// Scale based on weekly engagement rate
 var engLabel,engColor;
-if(engScore>=10){engLabel='Champion';engColor='#2E7D32';}
-else if(engScore>=5){engLabel='Active';engColor=CL.blue;}
-else if(engScore>=2){engLabel='Exploring';engColor=CL.gold;}
+if(weeklyRate>=5){engLabel='Champion';engColor='#2E7D32';}
+else if(weeklyRate>=2){engLabel='Active';engColor=CL.blue;}
+else if(weeklyRate>=0.5){engLabel='Exploring';engColor=CL.gold;}
 else{engLabel='Passing';engColor='#8A9099';}
 html+='<tr style="background:'+rowBg+';border-bottom:1px solid #F0F2F5"><td style="padding:10px 12px;font-size:12px;font-weight:600;color:#002D72;font-family:monospace">'+c.sfId+'</td><td style="padding:10px 12px;font-size:12px;color:#1A1A2E"><span style="font-weight:600">'+pages.length+'</span> <span style="color:#8A9099">page'+(pages.length!==1?'s':'')+'</span> <span style="font-size:10px;font-weight:600;color:'+engColor+';background:'+engColor+'14;border-radius:5px;padding:1px 7px;margin-left:4px">'+engLabel+'</span></td><td style="padding:10px 12px;white-space:nowrap;text-align:right"><button onclick="toggleContactPages(\''+pagesId+'\')" style="padding:3px 8px;border-radius:6px;border:1px solid #E8ECF0;background:#fff;font-size:10px;cursor:pointer;color:#8A9099;margin-right:6px">\u25BC Pages</button><a href="'+sfUrl+'" target="_blank" rel="noopener" style="font-size:11px;font-weight:600;color:#0960BB;text-decoration:none;padding:3px 10px;border:1px solid #0960BB22;border-radius:6px">View Contact \u2197</a></td></tr>';
 html+='<tr id="'+pagesId+'" style="display:none;background:'+rowBg+'"><td colspan="3" style="padding:0 12px 12px 32px"><div style="border-left:2px solid #E8ECF0;padding-left:12px;margin-top:4px">';pages.sort(function(a,b){if(a.ts&&b.ts)return b.ts.localeCompare(a.ts);if(a.ts&&!b.ts)return -1;if(!a.ts&&b.ts)return 1;return 0;}).forEach(function(p){var tierColor=/deep read|deep listen|listener/i.test(p.tier)?CL.blue:/skim/i.test(p.tier)?'#D4A017':/bounce/i.test(p.tier)?CL.red:'#8A9099';var tsLabel='';if(p.ts&&p.ts.length===12){var mo=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];var mm=parseInt(p.ts.slice(4,6),10);var dd=parseInt(p.ts.slice(6,8),10);var hh=parseInt(p.ts.slice(8,10),10);var mn=p.ts.slice(10,12);var ampm=hh>=12?"PM":"AM";var h12=hh%12||12;tsLabel=mo[mm-1]+" "+dd+" "+h12+":"+mn+" "+ampm;}html+='<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #F5F7FA"><span style="width:5px;height:5px;border-radius:50%;background:#D0D5DD;flex-shrink:0"></span>'+(tsLabel?'<span style="font-size:10px;color:#8A9099;flex-shrink:0;min-width:105px;font-family:monospace">'+tsLabel+'</span>':'')+'<span style="font-size:11px;color:#1A1A2E;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+p.cleanTitle+'">'+trunc(p.cleanTitle,48)+'</span><span style="font-size:10px;font-weight:600;color:'+tierColor+';background:'+tierColor+'18;border-radius:5px;padding:2px 8px;flex-shrink:0;white-space:nowrap">'+p.tier+'</span></div>';});html+='</div></td></tr>';});html+='</tbody></table>';return html;}
