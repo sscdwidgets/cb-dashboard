@@ -309,37 +309,46 @@ document.querySelectorAll("#tabs-bar .tab").forEach(btn=>{btn.addEventListener("
 const WORKER_URL = "https://siteimprove-proxy.jameswspence.workers.dev";
 async function fetchSiteImproveRange(fromStr, toStr, category, statusCb) {
   var catParam = category ? "&category=" + encodeURIComponent(category) : "";
-  var url = WORKER_URL + "?period=" + fromStr + "_" + toStr + "&page_size=1000" + catParam;
-  var resp = await fetch(url, { cache: 'no-store' });
-  var result = await resp.json();
-  if (result.error) throw new Error(result.error + (result.detail ? " \u2014 " + result.detail : ""));
-  var data = result.data || [];
-  if (data.length === 1000) {
-    if (statusCb) statusCb("Range too large, fetching by week...");
-    var weeks = splitIntoWeeks(fromStr, toStr);
-    var chunkFetches = weeks.map(function(w) {
-      var wUrl = WORKER_URL + "?period=" + w.from + "_" + w.to + "&page_size=1000" + catParam;
-      return fetch(wUrl, { cache: 'no-store' }).then(function(r) { return r.json(); }).then(function(r) { return r.data || []; }).catch(function() { return []; });
-    });
-    var chunkResults = await Promise.all(chunkFetches);
-    data = mergeEventRows(chunkResults);
-    var truncatedWeeks = chunkResults.filter(function(r) { return r.length >= 1000; }).length;
-    if (truncatedWeeks > 0 && statusCb) { statusCb("Warning: " + truncatedWeeks + " week(s) may still be truncated. Narrow the date range."); }
+  // Always fetch day-by-day and merge to avoid SiteImprove's 1000-row truncation.
+  // sfc: contact labels create many unique rows that easily exceed 1000 per period.
+  var days = splitIntoDays(fromStr, toStr);
+  if (days.length === 1) {
+    // Single day — just fetch directly
+    var url = WORKER_URL + "?period=" + days[0] + "&page_size=1000" + catParam;
+    var resp = await fetch(url, { cache: 'no-store' });
+    var result = await resp.json();
+    if (result.error) throw new Error(result.error + (result.detail ? " \u2014 " + result.detail : ""));
+    return result.data || [];
   }
+  if (statusCb) statusCb("Fetching " + days.length + " days...");
+  // Batch in groups of 7 to avoid hammering the API
+  var allChunkResults = [];
+  var batchSize = 7;
+  for (var b = 0; b < days.length; b += batchSize) {
+    var batch = days.slice(b, b + batchSize);
+    if (statusCb) statusCb("Fetching days " + (b + 1) + "-" + Math.min(b + batchSize, days.length) + " of " + days.length + "...");
+    var batchFetches = batch.map(function(day) {
+      var dUrl = WORKER_URL + "?period=" + day + "&page_size=1000" + catParam;
+      return fetch(dUrl, { cache: 'no-store' }).then(function(r) { return r.json(); }).then(function(r) { return r.data || []; }).catch(function() { return []; });
+    });
+    var batchResults = await Promise.all(batchFetches);
+    allChunkResults = allChunkResults.concat(batchResults);
+  }
+  var data = mergeEventRows(allChunkResults);
+  var truncatedDays = allChunkResults.filter(function(r) { return r.length >= 1000; }).length;
+  if (truncatedDays > 0 && statusCb) { statusCb("Warning: " + truncatedDays + " day(s) may still be truncated at 1000 rows."); }
   return data;
 }
-function splitIntoWeeks(fromStr, toStr) {
-  var chunks = [];
+function splitIntoDays(fromStr, toStr) {
+  var days = [];
   var cur = new Date(fromStr.slice(0,4)+'-'+fromStr.slice(4,6)+'-'+fromStr.slice(6,8)+'T12:00:00');
   var end = new Date(toStr.slice(0,4)+'-'+toStr.slice(4,6)+'-'+toStr.slice(6,8)+'T12:00:00');
   var fmt = function(d){ return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0'); };
   while(cur <= end) {
-    var chunkEnd = new Date(cur); chunkEnd.setDate(chunkEnd.getDate() + 6);
-    if(chunkEnd > end) chunkEnd = new Date(end);
-    chunks.push({from: fmt(cur), to: fmt(chunkEnd)});
-    cur.setDate(cur.getDate() + 7);
+    days.push(fmt(cur));
+    cur.setDate(cur.getDate() + 1);
   }
-  return chunks;
+  return days;
 }
 function mergeEventRows(allArrays) {
   var merged = {};
