@@ -110,7 +110,18 @@ tbody tr:nth-child(even){background:#FAFBFC}
 </style>
 </head>
 <body>
-<div class="wrap" id="app">
+<!-- Auth Gate -->
+<div id="auth-gate" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#F5F7FA;z-index:9999;display:flex;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;border:1px solid #E8ECF0;box-shadow:0 4px 24px rgba(0,45,114,.1);padding:40px;max-width:360px;width:90%;text-align:center">
+    <div style="width:48px;height:48px;border-radius:12px;background:#002D72;display:flex;align-items:center;justify-content:center;margin:0 auto 16px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
+    <div style="font-size:18px;font-weight:700;color:#002D72;margin-bottom:4px">CommandBar Analytics</div>
+    <div style="font-size:12px;color:#8A9099;margin-bottom:20px">SouthState Correspondent</div>
+    <input type="password" id="auth-input" placeholder="Enter access code" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid #E8ECF0;font-size:14px;font-family:inherit;color:#1A1A2E;outline:none;text-align:center;margin-bottom:12px" onkeydown="if(event.key==='Enter')checkAuth()">
+    <button onclick="checkAuth()" style="width:100%;padding:10px;border-radius:8px;border:none;background:#002D72;color:#fff;font-size:13px;font-weight:600;cursor:pointer;letter-spacing:.2px">Access Dashboard</button>
+    <div id="auth-error" style="margin-top:10px;font-size:12px;color:#E53935;display:none">Invalid access code</div>
+  </div>
+</div>
+<div class="wrap" id="app" style="display:none">
   <!-- Header -->
   <div class="header">
     <div class="header-left">
@@ -154,6 +165,36 @@ tbody tr:nth-child(even){background:#FAFBFC}
   <div class="footer" id="footer">CommandBar Analytics Dashboard v2.6.0 · Powered by SiteImprove Events + Leadfeeder · SouthState Correspondent</div>
 </div>
 <script>
+// ── AUTH GATE ──
+var AUTH_KEY = 'sscd2026';
+var authPassed = false;
+(function(){
+  var params = new URLSearchParams(window.location.search);
+  if (params.get('key') === AUTH_KEY) {
+    authPassed = true;
+    document.getElementById('auth-gate').style.display = 'none';
+    document.getElementById('app').style.display = '';
+  } else {
+    document.getElementById('auth-gate').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+    setTimeout(function(){ var inp = document.getElementById('auth-input'); if(inp) inp.focus(); }, 100);
+  }
+})();
+function checkAuth(){
+  var inp = document.getElementById('auth-input');
+  if (inp && inp.value === AUTH_KEY) {
+    authPassed = true;
+    document.getElementById('auth-gate').style.display = 'none';
+    document.getElementById('app').style.display = '';
+    // Trigger initial fetch since it was blocked
+    setTimeout(fetchAPI, 300);
+    fetchLfFeeds();
+  } else {
+    var err = document.getElementById('auth-error');
+    if (err) err.style.display = 'block';
+    if (inp) { inp.value = ''; inp.focus(); }
+  }
+}
 // ── DATA ──
 let RAW_DATA = [];
 let RAW_DATA_ALL = [];
@@ -323,7 +364,7 @@ function mergeEventRows(allArrays) {
 async function fetchAPI(){const fromEl=document.getElementById("date-from");const toEl=document.getElementById("date-to");const btn=document.getElementById("fetch-btn");const msgEl=document.getElementById("import-msg");if(!fromEl.value||!toEl.value){msgEl.innerHTML='<div class="import-msg error"><span>Select both start and end dates.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';return;}const from=fromEl.value.replace(/-/g,"");const to=toEl.value.replace(/-/g,"");if(from>to){msgEl.innerHTML='<div class="import-msg error"><span>Start date must be before end date.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';return;}const origText=btn.innerHTML;btn.innerHTML="Fetching...";btn.style.opacity=".6";btn.style.pointerEvents="none";msgEl.innerHTML="";
 try{btn.innerHTML="Fetching...";const allData=await fetchSiteImproveRange(from,to,null,function(msg){msgEl.innerHTML='<div class="import-msg success" style="background:#0960BB14;color:#0960BB"><span>'+msg+'</span></div>';btn.innerHTML="Chunking...";});if(!allData.length){msgEl.innerHTML='<div class="import-msg error"><span>No events found for this date range.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";return;}RAW_DATA=allData.filter(function(r){return r.category==="CommandBar";});RAW_DATA_ALL=allData;companiesData=null;mapStateData=null;mapCurrentView="us";companyPagesCache={};histData=null;artData=null;const fd=fromEl.value,td=toEl.value;const fmtDate=function(d){var p=d.split("-");var m=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];return m[parseInt(p[1],10)-1]+" "+parseInt(p[2],10)+", "+p[0]};PERIOD=fmtDate(fd)+(fd===td?"":" \u2013 "+fmtDate(td));hasData=true;msgEl.innerHTML='<div class="import-msg success"><span>'+RAW_DATA.length+' CommandBar events loaded for '+PERIOD+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';render();buildContactsIndex();if(currentTab==="contacts")renderContactsTab();if(currentTab==="art"){renderARTTab();setTimeout(fetchART,300);}setTimeout(fetchCompanies,300);}catch(err){console.error("API fetch error:",err);document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>Fetch failed: '+err.message+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';}btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";}
 // ── DATE DEFAULTS + AUTO-FETCH ──
-(function(){var today=new Date();var week=new Date(today);week.setDate(week.getDate()-6);var fmt=function(d){var y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),dd=String(d.getDate()).padStart(2,"0");return y+"-"+m+"-"+dd;};document.getElementById("date-from").value=fmt(week);document.getElementById("date-to").value=fmt(today);var btns=document.querySelectorAll(".date-quick");if(btns[0])btns[0].classList.add("active");fetchLfFeeds();setTimeout(fetchAPI,300);})();
+(function(){var today=new Date();var week=new Date(today);week.setDate(week.getDate()-6);var fmt=function(d){var y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),dd=String(d.getDate()).padStart(2,"0");return y+"-"+m+"-"+dd;};document.getElementById("date-from").value=fmt(week);document.getElementById("date-to").value=fmt(today);var btns=document.querySelectorAll(".date-quick");if(btns[0])btns[0].classList.add("active");if(authPassed){fetchLfFeeds();setTimeout(fetchAPI,300);}})();
 // ── CSV IMPORT ──
 document.getElementById("csv-input").addEventListener("change",function(e){const file=e.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=function(evt){try{const result=parseCSV(evt.target.result);if(result.data.length===0){document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>No CommandBar events found.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';return;}RAW_DATA=result.data;RAW_DATA_ALL=result.allRows||result.data;if(result.period)PERIOD=result.period;hasData=true;document.getElementById("import-msg").innerHTML='<div class="import-msg success"><span>'+result.data.length+' events loaded from '+file.name+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';render();}catch(err){document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>Parse error: '+err.message+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';}};reader.readAsText(file,"utf-16");this.value="";});
 // ── CONTACTS TAB ──
