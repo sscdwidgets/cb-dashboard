@@ -111,7 +111,7 @@ tbody tr:hover{background:#F3F3F3}
   <div class="header">
     <div class="header-left">
       <div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
-      <div style="position:relative;display:inline-block"><div class="title">CommandBar Analytics<span style="margin-left:10px;font-size:11px;font-weight:300;letter-spacing:.5px;color:rgba(255,255,255,0.35);vertical-align:middle">v2.6.0</span></div><div class="subtitle" id="period-label">SouthState Correspondent</div></div>
+      <div style="position:relative;display:inline-block"><div class="title">CommandBar Analytics<span style="margin-left:10px;font-size:11px;font-weight:300;letter-spacing:.5px;color:rgba(255,255,255,0.35);vertical-align:middle">v2.6.0</span></div><div class="subtitle" id="period-label"></div></div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <div style="display:flex;gap:4px;align-items:center">
@@ -123,9 +123,9 @@ tbody tr:hover{background:#F3F3F3}
       <input type="date" id="date-from" min="2026-03-29" style="padding:6px 10px;border-radius:8px;border:1px solid #E5E5E5;font-size:12px;font-family:inherit;color:#181818">
       <span style="font-size:11px;color:#706E6B">to</span>
       <input type="date" id="date-to" style="padding:6px 10px;border-radius:8px;border:1px solid #E5E5E5;font-size:12px;font-family:inherit;color:#181818">
-      <button class="import-btn" id="fetch-btn" onclick="fetchAPI()" style="background:#2E844A">
+      <button class="import-btn" id="fetch-btn" onclick="fetchAPI()" style="background:#0176D3">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-        Fetch
+        Load Data
       </button>
       <input type="file" id="csv-input" accept=".csv,.tsv,.txt" style="display:none">
       <button class="import-btn" id="csv-btn" onclick="document.getElementById('csv-input').click()" style="background:#706E6B;display:none">
@@ -143,10 +143,10 @@ tbody tr:hover{background:#F3F3F3}
     <button class="tab" data-tab="art">Acq Risk Tool</button>
   </div>
   <!-- Tab Panels -->
-  <div id="tab-contacts"></div>
-  <div id="tab-companies" class="hidden"></div>
-  <div id="tab-map" class="hidden"></div>
-  <div id="tab-art" class="hidden"></div>
+  <div id="tab-contacts" style="margin-top:20px"></div>
+  <div id="tab-companies" class="hidden" style="margin-top:20px"></div>
+  <div id="tab-map" class="hidden" style="margin-top:20px"></div>
+  <div id="tab-art" class="hidden" style="margin-top:20px"></div>
   <div class="footer" id="footer">CommandBar Analytics Dashboard v2.6.0 · Powered by SiteImprove Events + Leadfeeder · SouthState Correspondent</div>
 </div>
 <script>
@@ -223,7 +223,7 @@ function parseCSV(text){const lines=text.split(/\r?\n/);let period="",headerIdx=
 // ── RENDER ──
 function render(){
   Object.values(charts).forEach(c=>c.destroy());charts={};
-  document.getElementById("period-label").textContent=(PERIOD?PERIOD+" \u00b7 ":"")+"SouthState Correspondent";
+  document.getElementById("period-label").textContent=PERIOD||"";
   if(currentTab==="companies")renderCompaniesTab();
   if(currentTab==="map")renderMapTab();
   buildContactsIndex();
@@ -420,7 +420,7 @@ function buildContactsIndex(){
 var CONTENT_TIERS=['Deep Read','Deep Listen','Skim','Bounce','Listener'];var contactPageSearch='';
 function parsePage(p){var tierMatch=p.label.match(/^(Deep Read|Deep Listen|Skim|Bounce|Listener|Impression|Daily Visit|Open):\s*/i);var tier=tierMatch?tierMatch[1]:(Object.keys(p.actions)[0]||'');if(/^(Impression|Daily Visit|Open|Rail|Minimize)$/i.test(tier))return null;var cleanTitle=tierMatch?p.label.slice(tierMatch[0].length):p.label;cleanTitle=cleanTitle.replace(/\s*\|\s*sfc:[A-Za-z0-9]+$/,'').replace(/\s*\|\s*anon:[a-f0-9]+/i,'').replace(/\s*\|\s*ts:\d+/,'').trim();if(/^pip$/i.test(cleanTitle))return null;return{tier:tier,cleanTitle:cleanTitle,ts:p.ts||null,wasAnon:p.wasAnon||false};}
 function renderContactsTab(){var el=document.getElementById("tab-contacts");if(!el)return;var noData=!RAW_DATA||!RAW_DATA.length;
-var html='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px"><div class="chart-title" style="margin-bottom:0">Identified Contacts</div><input type="text" id="contacts-search" placeholder="Search by page or Salesforce ID..." oninput="setContactPageSearch(this.value)" style="padding:5px 10px;border-radius:8px;border:1px solid #E5E5E5;font-size:12px;font-family:inherit;color:#181818;outline:none;width:260px"></div>';if(noData){html+='<div style="padding:40px;text-align:center;color:#706E6B;font-size:13px">Fetch data first to identify contacts.</div>';}else{html+='<div id="contacts-list">'+renderContactRows()+'</div>';
+var html='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px"><div class="chart-title" style="margin-bottom:0">Identified Contacts</div><input type="text" id="contacts-search" placeholder="Search by page or Salesforce ID..." oninput="setContactPageSearch(this.value)" style="padding:5px 10px;border-radius:8px;border:1px solid #E5E5E5;font-size:12px;font-family:inherit;color:#181818;outline:none;width:260px"></div>';if(noData){html+='<div style="padding:40px;text-align:center;color:#706E6B;font-size:13px">Load data to identify contacts.</div>';}else{html+='<div id="contacts-list">'+renderContactRows()+'</div>';
 // Unidentified visitors section
 var anonList=Object.values(anonIndex);if(anonList.length>0){anonList.sort(function(a,b){return b.totalEvents-a.totalEvents;});html+='<div style="margin-top:24px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><div class="chart-title" style="margin-bottom:0;color:#706E6B">Unidentified Visitors</div><span style="font-size:10px;color:#706E6B;background:#F5F7FA;border-radius:10px;padding:2px 8px">'+anonList.length+'</span></div>';html+='<table style="width:100%;border-collapse:collapse"><thead><tr style="background:#F5F7FA"><th style="text-align:left;padding:8px 12px;font-size:10px;font-weight:700;color:#706E6B;text-transform:uppercase;letter-spacing:.5px">Anon ID</th><th style="text-align:left;padding:8px 12px;font-size:10px;font-weight:700;color:#706E6B;text-transform:uppercase;letter-spacing:.5px">Activity</th><th></th></tr></thead><tbody>';
 anonList.forEach(function(a,i){var anonPages=getFilteredPages(a);if(anonPages.length===0)return;var rowBg=i%2===0?"#fff":"#F8F9FC";var pagesId="anon-pages-"+i;html+='<tr style="background:'+rowBg+';border-bottom:1px solid #F3F3F3"><td style="padding:10px 12px;font-size:12px;font-weight:600;color:#706E6B;font-family:monospace">'+a.anonId+'</td><td style="padding:10px 12px;font-size:12px;color:#181818"><span style="font-weight:600">'+anonPages.length+'</span> <span style="color:#706E6B">page'+(anonPages.length!==1?'s':'')+'</span></td><td style="padding:10px 12px;text-align:right"><button onclick="toggleContactPages(\''+pagesId+'\')" style="padding:3px 8px;border-radius:6px;border:1px solid #E5E5E5;background:#fff;font-size:10px;cursor:pointer;color:#706E6B">\u25BC Pages</button></td></tr>';
