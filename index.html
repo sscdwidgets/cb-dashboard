@@ -223,6 +223,8 @@ if(!feedSidebarOpen){
 var html='<div class="feed-sidebar" id="'+domId+'">';
 // Header with collapse arrow
 html+='<div class="feed-sidebar-header" style="cursor:pointer" onclick="toggleFeedSidebar()"><span class="feed-sidebar-label">Feeds</span><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#706E6B" stroke-width="2.5" style="flex-shrink:0"><polyline points="15 18 9 12 15 6"/></svg></div>';
+// Search
+html+='<div class="feed-sidebar-search"><input type="text" placeholder="Search all..." oninput="filterFeedSidebar(this.value,\''+domId+'\')" id="'+domId+'-search"></div>';
 // All Feeds item
 html+='<div class="feed-sidebar-item'+(currentLfFeed===null?' active':'')+'" onclick="setLfFeed(null)" style="padding:5px 12px"><span class="fsn" style="font-size:10px">All Feeds</span></div>';
 // Folders inline
@@ -244,9 +246,7 @@ Object.keys(FEED_FOLDERS).forEach(function(folder){
   }
   html+='</div>';
 });
-// Search + full list
-html+='<div style="border-top:1px solid #E5E5E5"></div>';
-html+='<div class="feed-sidebar-search"><input type="text" placeholder="Search all..." oninput="filterFeedSidebar(this.value,\''+domId+'\')" id="'+domId+'-search"></div>';
+// Full feed list
 html+='<div class="feed-sidebar-list" id="'+domId+'-list">'+feedSidebarItems()+'</div></div>';return html;}
 function feedSidebarItems(filter){filter=(filter||'').toLowerCase();var items='';lfFeeds.filter(function(f){return !filter||f.name.toLowerCase().indexOf(filter)>-1}).forEach(function(f){var isActive=(currentLfFeed===f.id);items+='<div class="feed-sidebar-item'+(isActive?' active':'')+'" onclick="setLfFeed(\''+f.id+'\')"><span class="fsn">'+f.name+'</span></div>';});return items;}
 function filterFeedSidebar(val,domId){var list=document.getElementById(domId+'-list');if(list)list.innerHTML=feedSidebarItems(val);}
