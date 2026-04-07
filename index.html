@@ -247,7 +247,10 @@ Object.keys(FEED_FOLDERS).forEach(function(folder){
   html+='</div>';
 });
 // Full feed list
-html+='<div class="feed-sidebar-list" id="'+domId+'-list">'+feedSidebarItems()+'</div></div>';return html;}
+html+='<div class="feed-sidebar-list" id="'+domId+'-list">'+feedSidebarItems()+'</div>';
+// Dealfront link
+html+='<div style="padding:8px 10px;border-top:1px solid #E5E5E5;text-align:center"><a href="https://app.dealfront.com/f/sign/in" target="_blank" rel="noopener" style="font-size:10px;color:#0176D3;text-decoration:none;font-weight:600">Manage Feeds in Leadfeeder \u2197</a></div>';
+html+='</div>';return html;}
 function feedSidebarItems(filter){filter=(filter||'').toLowerCase();var items='';lfFeeds.filter(function(f){return !filter||f.name.toLowerCase().indexOf(filter)>-1}).forEach(function(f){var isActive=(currentLfFeed===f.id);items+='<div class="feed-sidebar-item'+(isActive?' active':'')+'" onclick="setLfFeed(\''+f.id+'\')"><span class="fsn">'+f.name+'</span></div>';});return items;}
 function filterFeedSidebar(val,domId){var list=document.getElementById(domId+'-list');if(list)list.innerHTML=feedSidebarItems(val);}
 function toggleFeedSidebar(){feedSidebarOpen=!feedSidebarOpen;renderFeedSidebars();}
