@@ -140,12 +140,14 @@ tbody tr:hover{background:#F3F3F3}
   <!-- Tabs -->
   <div id="tabs-bar" class="tabs">
     <button class="tab active" data-tab="contacts">Contacts</button>
+    <button class="tab" data-tab="intent">Intent <span style="font-size:9px;font-weight:700;color:#0176D3;background:#0176D314;border-radius:3px;padding:1px 5px;margin-left:3px;vertical-align:middle">BETA</span></button>
     <button class="tab" data-tab="companies">Companies</button>
     <button class="tab" data-tab="map">Firmographic Map</button>
     <button class="tab" data-tab="art">ACQ Risk Tool</button>
   </div>
   <!-- Tab Panels -->
   <div id="tab-contacts" style="margin-top:20px"></div>
+  <div id="tab-intent" class="hidden" style="margin-top:20px"></div>
   <div id="tab-companies" class="hidden" style="margin-top:20px"></div>
   <div id="tab-map" class="hidden" style="margin-top:20px"></div>
   <div id="tab-art" class="hidden" style="margin-top:20px"></div>
@@ -298,7 +300,7 @@ function mapDrillCity(city){mapCurrentCity=city;mapCurrentView="city";renderUSMa
 function renderCityCompanies(container,sc,city){var sd=mapStateData[sc];if(!sd||!sd.cities[city]){container.innerHTML="No data.";return;}var cos=sd.cities[city];var html='<div style="display:flex;flex-direction:column;gap:8px">';cos.forEach(function(c){var qColor=c.quality>=8?"#2E7D32":c.quality>=5?"#0176D3":c.quality>=3?"#FFBF3F":"#706E6B";var empLabel=c.employee_count?c.employee_count>=10001?"10k+":c.employee_count>=1000?Math.round(c.employee_count/1000)+"k":String(c.employee_count):"\u2013";html+='<div style="padding:12px;border-radius:10px;border:1px solid #E5E5E5;background:#fff"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">';if(c.logo_url)html+='<img src="'+c.logo_url+'" style="width:32px;height:32px;border-radius:6px;object-fit:contain;background:#F5F7FA" onerror="this.style.display=\'none\'">';html+='<div style="flex:1"><div style="font-size:14px;font-weight:700;color:#032D60">'+c.name+'</div><div style="font-size:10px;color:#706E6B">'+(c.industry||"")+(c.employee_count?" \u00b7 "+empLabel+" employees":"")+'</div></div><span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;font-size:14px;font-weight:700;background:'+qColor+'14;color:'+qColor+'">'+c.quality+'</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;font-size:10px;color:#706E6B"><span>Last visit: '+(c.last_visit_date||"\u2013")+'</span>';if(c.website_url)html+='<a href="'+c.website_url+'" target="_blank" style="color:#0176D3;text-decoration:none">'+c.website_url.replace(/^https?:\/\//,"").replace(/\/+$/,"")+'</a>';html+='</div>';var pagesId="map-pages-"+c.id.replace(/[^a-zA-Z0-9]/g,"").slice(0,20);html+='<div style="margin-top:8px"><button onclick="toggleCompanyPages(\''+c.id+'\',\''+pagesId+'\')" style="padding:3px 10px;border-radius:6px;border:1px solid #E5E5E5;background:#fff;font-size:10px;cursor:pointer;color:#0176D3;font-weight:600">\u25BC View Pages</button></div><div id="'+pagesId+'" style="display:none"><div id="'+pagesId+'-content" style="padding:8px 0;font-size:11px;color:#706E6B">Loading...</div></div></div>';});html+='</div>';container.innerHTML=html;}
 function mapGoBack(){if(mapCurrentView==="city"){mapCurrentView="state";mapCurrentCity="";}else if(mapCurrentView==="state"){mapCurrentView="us";mapCurrentState="";}renderUSMap();}
 // ── TAB SWITCHING ──
-document.querySelectorAll("#tabs-bar .tab").forEach(btn=>{btn.addEventListener("click",()=>{document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));btn.classList.add("active");currentTab=btn.dataset.tab;["contacts","companies","map","art"].forEach(t=>{document.getElementById("tab-"+t).classList.toggle("hidden",t!==currentTab);});if(currentTab==="companies"){renderCompaniesTab();if(!companiesData)setTimeout(fetchCompanies,100);}if(currentTab==="map"){renderMapTab();if(!companiesData)setTimeout(fetchMapData,100);}if(currentTab==="contacts"){renderContactsTab();}if(currentTab==="art"){renderARTTab();if(!artData)setTimeout(fetchART,100);}});});
+document.querySelectorAll("#tabs-bar .tab").forEach(btn=>{btn.addEventListener("click",()=>{document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));btn.classList.add("active");currentTab=btn.dataset.tab;["contacts","intent","companies","map","art"].forEach(t=>{document.getElementById("tab-"+t).classList.toggle("hidden",t!==currentTab);});if(currentTab==="companies"){renderCompaniesTab();if(!companiesData)setTimeout(fetchCompanies,100);}if(currentTab==="map"){renderMapTab();if(!companiesData)setTimeout(fetchMapData,100);}if(currentTab==="contacts"){renderContactsTab();}if(currentTab==="intent"){renderIntentTab();}if(currentTab==="art"){renderARTTab();if(!artData)setTimeout(fetchART,100);}});});
 // ── LOADING MESSAGES ──
 var LOADING_MSGS=[
   "James is squinting at a spreadsheet somewhere...",
@@ -480,6 +482,140 @@ html+='<tr id="'+pagesId+'" style="display:none;background:'+rowBg+'"><td colspa
 function toggleContactPages(rowId){var row=document.getElementById(rowId);if(row)row.style.display=row.style.display==="none"?"":"none";}
 function setContactPageSearch(val){contactPageSearch=val.toLowerCase().trim();var list=document.getElementById("contacts-list");if(list)list.innerHTML=renderContactRows();}
 function getFilteredPages(c){var searchId=c.sfId||c.anonId||'';return Object.values(c.pages).map(function(p){var parsed=parsePage(p);if(!parsed)return null;if(contactPageSearch&&parsed.cleanTitle.toLowerCase().indexOf(contactPageSearch)===-1&&searchId.toLowerCase().indexOf(contactPageSearch)===-1)return null;return parsed;}).filter(Boolean);}
+// ── INTENT TAB ──
+var PRODUCT_LINES={
+  "ARC / Hedging":["/loan-hedging","/arc","/arc-hub","/arc-resources","/arc-rates","/cost-of-funding","/arc-guided-tour","/arc-for-cus"],
+  "Loan Command":["/loan-pricing-model","/loan-command","/loanpricing"],
+  "Debt Capital Markets":["/debt-capital-markets","/market-rates"],
+  "International":["/international-services"],
+};
+var HIGH_INTENT_PAGES=["/contact-us","/loan-command-demo","/arc-rates-request","/banker-to-banker-sign-up","/check-out","/vendor-sign-up"];
+
+function buildIntentData(){
+  var results=[];
+  if(!companiesData)return results;
+  var fromVal=document.getElementById("date-from").value;var toVal=document.getElementById("date-to").value;
+  var rangeDays=1;if(fromVal&&toVal){var d1=new Date(fromVal+"T12:00:00");var d2=new Date(toVal+"T12:00:00");rangeDays=Math.max(1,Math.round((d2-d1)/86400000)+1);}
+  var rangeWeeks=Math.max(1,rangeDays/7);
+  companiesData.forEach(function(co){
+    if(INTERNAL_NAMES.some(function(n){return(co.name||"").indexOf(n)>-1;}))return;
+    var score=0;var signals=[];var products={};
+    // 1. Leadfeeder quality (0-10 scale, worth up to 20 pts)
+    var q=co.quality||0;score+=q*2;
+    if(q>=8)signals.push("High quality lead ("+q+"/10)");
+    // 2. Check cached visit pages for product affinity and high-intent pages
+    var visits=companyPagesCache[co.id]||[];
+    var allPaths=[];
+    visits.forEach(function(v){(v.visit_route||[]).forEach(function(p){if(p.page_path)allPaths.push(p.page_path.toLowerCase().split("?")[0]);});});
+    // Product line detection
+    Object.keys(PRODUCT_LINES).forEach(function(prod){var urls=PRODUCT_LINES[prod];var hits=allPaths.filter(function(path){return urls.some(function(u){return path.indexOf(u)>-1;});}).length;if(hits>0){products[prod]=hits;score+=Math.min(hits*5,15);signals.push(prod+": "+hits+" page"+(hits>1?"s":""));}});
+    // High-intent page bonus
+    var intentHits=allPaths.filter(function(path){return HIGH_INTENT_PAGES.some(function(u){return path.indexOf(u)>-1;});}).length;
+    if(intentHits>0){score+=intentHits*10;signals.push("High-intent page"+(intentHits>1?"s":"")+": "+intentHits);}
+    // 3. Visit frequency
+    var visitCount=visits.length;if(visitCount>=5){score+=15;signals.push(visitCount+" visits");}else if(visitCount>=3){score+=10;signals.push(visitCount+" visits");}else if(visitCount>=1){score+=5;}
+    // 4. Recency bonus
+    if(co.last_visit_date){var lastVisit=new Date(co.last_visit_date+"T12:00:00");var today=new Date();var daysAgo=Math.round((today-lastVisit)/86400000);if(daysAgo<=2){score+=15;signals.push("Visited in last 2 days");}else if(daysAgo<=7){score+=10;signals.push("Visited this week");}else if(daysAgo<=14){score+=5;}}
+    // 5. Multi-product bonus
+    var prodCount=Object.keys(products).length;if(prodCount>=2){score+=10;signals.push("Multi-product interest ("+prodCount+")");}
+    // 6. Contact-identified bonus (check if any SFC contacts map to this company)
+    // Normalize to 0-100
+    score=Math.min(100,score);
+    // Intent level
+    var level,levelColor;
+    if(score>=70){level="High Intent";levelColor="#2E844A";}
+    else if(score>=40){level="Medium Intent";levelColor="#0176D3";}
+    else if(score>=20){level="Low Intent";levelColor="#DD7A01";}
+    else{level="Monitoring";levelColor="#706E6B";}
+    results.push({company:co,score:score,level:level,levelColor:levelColor,signals:signals,products:products,visitCount:visitCount});
+  });
+  results.sort(function(a,b){return b.score-a.score;});
+  return results;
+}
+
+var intentSortField='score';var intentSortDir='desc';var intentMinScore=0;
+
+function renderIntentTab(){
+  var el=document.getElementById("tab-intent");if(!el)return;
+  var noData=!companiesData;
+  var html='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">';
+  html+='<div style="display:flex;align-items:center;gap:8px"><div class="chart-title" style="margin-bottom:0">Intent Signals</div><span style="font-size:9px;font-weight:700;color:#0176D3;background:#0176D314;border-radius:3px;padding:2px 6px">BETA</span></div>';
+  html+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
+  html+='<label style="font-size:11px;color:#706E6B">Min score:</label>';
+  html+='<input type="range" id="intent-min-score" min="0" max="70" step="10" value="'+intentMinScore+'" oninput="intentMinScore=parseInt(this.value);document.getElementById(\'intent-min-val\').textContent=this.value;renderIntentList()" style="width:100px">';
+  html+='<span id="intent-min-val" style="font-size:11px;font-weight:600;color:#032D60;min-width:20px">'+intentMinScore+'</span>';
+  html+='</div></div>';
+  if(noData){
+    html+='<div style="padding:40px;text-align:center;color:#706E6B;font-size:13px">Load data and wait for Companies to finish loading.</div>';
+  }else{
+    // Summary cards
+    var data=buildIntentData();
+    var high=data.filter(function(d){return d.score>=70;}).length;
+    var med=data.filter(function(d){return d.score>=40&&d.score<70;}).length;
+    var low=data.filter(function(d){return d.score>=20&&d.score<40;}).length;
+    html+='<div class="cards">';
+    html+=card("High Intent",high,"Score 70+","#2E844A");
+    html+=card("Medium Intent",med,"Score 40-69",CL.blue);
+    html+=card("Low Intent",low,"Score 20-39",CL.gold);
+    html+=card("Total Tracked",data.length,"Companies with signals",CL.navy);
+    html+='</div>';
+    html+='<div id="intent-list">'+renderIntentList(data)+'</div>';
+  }
+  el.innerHTML=html;
+}
+
+function renderIntentList(data){
+  if(!data)data=buildIntentData();
+  var filtered=data.filter(function(d){return d.score>=intentMinScore;});
+  if(filtered.length===0)return'<div style="text-align:center;padding:32px;color:#706E6B;font-size:12px">No companies above the minimum score threshold.</div>';
+  // Sort
+  filtered.sort(function(a,b){
+    if(intentSortField==='score')return intentSortDir==='desc'?b.score-a.score:a.score-b.score;
+    if(intentSortField==='name')return intentSortDir==='asc'?a.company.name.localeCompare(b.company.name):b.company.name.localeCompare(a.company.name);
+    if(intentSortField==='visits')return intentSortDir==='desc'?b.visitCount-a.visitCount:a.visitCount-b.visitCount;
+    return b.score-a.score;
+  });
+  var html='<div style="font-size:11px;color:#706E6B;margin-bottom:8px">'+filtered.length+' compan'+(filtered.length!==1?'ies':'y')+' with intent signals</div>';
+  html+='<div class="chart-card" style="padding:0;overflow:hidden"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:1px solid #E5E5E5">';
+  [{l:'Company',f:'name',a:'left'},{l:'Intent Score',f:'score',a:'center'},{l:'Level',f:'level',a:'center'},{l:'Visits',f:'visits',a:'center'},{l:'Signals',f:'signals',a:'left'}].forEach(function(col){
+    var active=intentSortField===col.f;var arrow=active?(intentSortDir==='desc'?' \u25BC':' \u25B2'):'';
+    html+='<th onclick="intentSort(\''+col.f+'\')" style="text-align:'+col.a+';padding:10px 12px;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;cursor:pointer;color:'+(active?'#032D60':'#706E6B')+'">'+col.l+arrow+'</th>';
+  });
+  html+='</tr></thead><tbody>';
+  filtered.forEach(function(d,i){
+    var co=d.company;
+    var barColor=d.score>=70?'#2E844A':d.score>=40?'#0176D3':d.score>=20?'#DD7A01':'#706E6B';
+    html+='<tr style="border-bottom:1px solid #F3F3F3;'+(i%2===1?'background:#F9F9F9;':'')+'">';
+    // Company
+    html+='<td style="padding:10px 12px;text-align:left"><div style="font-weight:600;color:#181818">'+co.name+'</div>';
+    if(co.industry)html+='<div style="font-size:10px;color:#706E6B">'+co.industry+'</div>';
+    if(co.state)html+='<div style="font-size:10px;color:#706E6B">'+co.state+(co.city?', '+co.city:'')+'</div>';
+    html+='</td>';
+    // Score with bar
+    html+='<td style="text-align:center;padding:10px 12px"><div style="display:flex;align-items:center;gap:6px;justify-content:center"><div style="width:50px;height:6px;background:#F3F3F3;border-radius:3px;overflow:hidden"><div style="height:100%;width:'+d.score+'%;background:'+barColor+';border-radius:3px"></div></div><span style="font-size:14px;font-weight:700;color:'+barColor+'">'+d.score+'</span></div></td>';
+    // Level
+    html+='<td style="text-align:center;padding:10px 12px"><span style="font-size:10px;font-weight:600;color:'+d.levelColor+';background:'+d.levelColor+'14;border-radius:4px;padding:2px 8px">'+d.level+'</span></td>';
+    // Visits
+    html+='<td style="text-align:center;padding:10px 12px;font-weight:600;color:#032D60">'+d.visitCount+'</td>';
+    // Signals
+    html+='<td style="padding:10px 12px;text-align:left">';
+    if(d.signals.length>0){d.signals.forEach(function(s){html+='<div style="font-size:10px;color:#444;padding:1px 0">\u2022 '+s+'</div>';});}
+    // Product pills
+    var prods=Object.keys(d.products);
+    if(prods.length>0){html+='<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">';prods.forEach(function(p){html+='<span style="font-size:9px;font-weight:600;color:#0176D3;background:#0176D314;border-radius:3px;padding:1px 6px">'+p+'</span>';});html+='</div>';}
+    html+='</td></tr>';
+  });
+  html+='</tbody></table></div>';
+  return html;
+}
+
+function intentSort(field){
+  if(intentSortField===field)intentSortDir=intentSortDir==='desc'?'asc':'desc';
+  else{intentSortField=field;intentSortDir=field==='name'?'asc':'desc';}
+  var list=document.getElementById('intent-list');
+  if(list)list.innerHTML=renderIntentList();
+}
+
 // ── ACQUISITION RISK TOOL TAB ──
 var artData=null;var ART_CATEGORY="Acquisition Risk Tool";
 async function fetchART(){var btn=document.getElementById("art-fetch-btn");var status=document.getElementById("art-status");var fromEl=document.getElementById("date-from");var toEl=document.getElementById("date-to");var startDate=fromEl&&fromEl.value?fromEl.value.replace(/-/g,""):defaultDateStr(-6).replace(/-/g,"");var endDate=toEl&&toEl.value?toEl.value.replace(/-/g,""):defaultDateStr(0).replace(/-/g,"");if(btn){btn.innerHTML="Loading...";btn.style.opacity=".6";btn.style.pointerEvents="none";}if(status)status.textContent="Fetching Acquisition Risk Tool events...";try{artData=await fetchSiteImproveRange(startDate,endDate,ART_CATEGORY,function(msg){if(status)status.textContent=msg;});if(status)status.innerHTML='<span style="color:#2E844A">'+artData.length+' rows loaded for "'+ART_CATEGORY+'".</span>';renderARTContent();}catch(err){if(status)status.innerHTML='<span style="color:#BA0517">Failed: '+err.message+'</span>';}if(btn){btn.innerHTML="Reload";btn.style.opacity="1";btn.style.pointerEvents="auto";}}
