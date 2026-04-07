@@ -210,7 +210,7 @@ var currentLfFeed = null;
 var lfFeedsLoaded = false;
 async function fetchLfFeeds(){
   if(lfFeedsLoaded)return;
-  try{var resp=await fetch(LF_URL+"/feeds",{cache:'no-store'});var result=await resp.json();if(result.data&&result.data.length>0){lfFeeds=result.data.map(function(f){return{id:f.id,name:f.name||f.id,lead_count:f.lead_count};});}lfFeedsLoaded=true;}catch(e){lfFeedsLoaded=true;}
+  try{var resp=await fetch(LF_URL+"/feeds",{cache:'no-store'});var result=await resp.json();console.group('Leadfeeder Feeds — raw API response');console.log('Total feeds:',result.data?result.data.length:0);if(result.data&&result.data.length>0){result.data.forEach(function(f,i){console.log('Feed '+i+':',JSON.stringify(f));});lfFeeds=result.data.map(function(f){return{id:f.id,name:f.name||f.id,lead_count:f.lead_count,folder:f.folder||f.category||f.group||f.parent||null};});}console.groupEnd();lfFeedsLoaded=true;}catch(e){lfFeedsLoaded=true;}
   renderFeedSidebars();
 }
 var feedSidebarOpen = true;
