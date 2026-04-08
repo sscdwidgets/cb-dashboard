@@ -449,7 +449,7 @@ function buildContactsIndex(){
 
     if(sfId){
       // Identified contact (directly or via anon linking)
-      if(!contactsIndex[sfId])contactsIndex[sfId]={sfId:sfId,pages:{},totalEvents:0,hasAnonHistory:false,formName:null,formEmail:null};
+      if(!contactsIndex[sfId])contactsIndex[sfId]={sfId:sfId,pages:{},totalEvents:0,hasAnonHistory:false,formName:null,formEmail:null,isAmplifier:false};
       var c=contactsIndex[sfId];
       c.totalEvents+=(row.events||0);
       if(wasAnon)c.hasAnonHistory=true;
@@ -465,7 +465,7 @@ function buildContactsIndex(){
       c.pages[pageKey].actions[actionType]=(c.pages[pageKey].actions[actionType]||0)+(row.events||0);
     }else if(anonId){
       // Unidentified anonymous visitor — no Identify event found
-      if(!anonIndex[anonId])anonIndex[anonId]={anonId:anonId,pages:{},totalEvents:0,formName:null,formEmail:null};
+      if(!anonIndex[anonId])anonIndex[anonId]={anonId:anonId,pages:{},totalEvents:0,formName:null,formEmail:null,isAmplifier:false};
       var a=anonIndex[anonId];
       a.totalEvents+=(row.events||0);
       // Parse Form Capture events for name/email
@@ -487,13 +487,53 @@ function buildContactsIndex(){
   Object.keys(anonIndex).forEach(function(anonId){
     var a=anonIndex[anonId];
     if(a.formName||a.formEmail){
-      // Move to contactsIndex keyed by anon ID (prefixed to avoid collision with SFC IDs)
       var key='anon:'+anonId;
-      contactsIndex[key]={sfId:null,anonId:anonId,pages:a.pages,totalEvents:a.totalEvents,hasAnonHistory:true,formName:a.formName,formEmail:a.formEmail};
+      contactsIndex[key]={sfId:null,anonId:anonId,pages:a.pages,totalEvents:a.totalEvents,hasAnonHistory:true,formName:a.formName,formEmail:a.formEmail,isAmplifier:false};
       promoteKeys.push(anonId);
     }
   });
   promoteKeys.forEach(function(k){delete anonIndex[k];});
+
+  // Pass 4: Amplifier detection
+  // For each SFC contact, check if any page title was visited by 3+ different anon IDs on the same day
+  // This indicates the contact forwarded a link and others clicked it
+  // Build a lookup: sfId → { "pageTitle|YYYYMMDD" → Set of anonIds }
+  var ampTrack={};
+  source.forEach(function(row){
+    if(!row.label||row.action==='Identify')return;
+    var sfcMatch=row.label.match(/sfc:([A-Za-z0-9]{18}|[A-Za-z0-9]{15})(?![A-Za-z0-9])/);
+    var anonMatch=row.label.match(/anon:([a-f0-9]{8})(?![a-f0-9])/i);
+    var sfId=null;var anonId=null;
+    if(sfcMatch){sfId=sfcMatch[1];anonId='direct';}
+    else if(anonMatch){
+      anonId=anonMatch[1];
+      if(anonToSfc[anonId])sfId=anonToSfc[anonId];
+    }
+    if(!sfId||!anonId)return;
+    var tsMatch=row.label.match(/\|\s*ts:(\d{12})/);
+    if(!tsMatch)return;
+    var day=tsMatch[1].slice(0,8); // YYYYMMDD
+    var tierMatch=row.label.match(/^(Deep Read|Deep Listen|Skim|Bounce|Listener|Submitted|Abandoned):\s*/i);
+    if(!tierMatch)return; // only count content engagement, not system events
+    var title=row.label.replace(tierMatch[0],'').replace(/\s*\|.*$/,'').trim();
+    if(!title)return;
+    var key=title+'|'+day;
+    if(!ampTrack[sfId])ampTrack[sfId]={};
+    if(!ampTrack[sfId][key])ampTrack[sfId][key]=new Set();
+    ampTrack[sfId][key].add(anonId);
+  });
+  // Mark contacts as Amplifiers if any page+day has 3+ unique anon IDs
+  Object.keys(ampTrack).forEach(function(sfId){
+    var c=contactsIndex[sfId];
+    if(!c)return;
+    var pageKeys=Object.keys(ampTrack[sfId]);
+    for(var i=0;i<pageKeys.length;i++){
+      if(ampTrack[sfId][pageKeys[i]].size>=3){
+        c.isAmplifier=true;
+        break;
+      }
+    }
+  });
 }
 var CONTENT_TIERS=['Deep Read','Deep Listen','Skim','Bounce','Listener'];var contactPageSearch='';
 function parsePage(p){var tierMatch=p.label.match(/^(Deep Read|Deep Listen|Skim|Bounce|Listener|Submitted|Abandoned|Impression|Daily Visit|Open|Form Capture):\s*/i);var tier=tierMatch?tierMatch[1]:(Object.keys(p.actions)[0]||'');if(/^(Impression|Daily Visit|Open|Rail|Minimize|Form Capture)$/i.test(tier))return null;var cleanTitle=tierMatch?p.label.slice(tierMatch[0].length):p.label;cleanTitle=cleanTitle.replace(/\s*\|\s*sfc:[A-Za-z0-9]+$/,'').replace(/\s*\|\s*anon:[a-f0-9]+/i,'').replace(/\s*\|\s*ts:\d+/,'').replace(/\s*\|\s*did:[a-f0-9-]+/i,'').trim();if(/^pip$/i.test(cleanTitle))return null;if(/^Form Capture/i.test(p.label))return null;return{tier:tier,cleanTitle:cleanTitle,ts:p.ts||null,did:p.did||null,wasAnon:p.wasAnon||false};}
@@ -504,7 +544,7 @@ var html='';
 // Calculate date range in days for score normalization
 var fromVal=document.getElementById("date-from").value;var toVal=document.getElementById("date-to").value;var rangeDays=1;if(fromVal&&toVal){var d1=new Date(fromVal+"T12:00:00");var d2=new Date(toVal+"T12:00:00");rangeDays=Math.max(1,Math.round((d2-d1)/(86400000))+1);}var rangeWeeks=Math.max(1,rangeDays/7);
 if(filtered.length>0){
-html+='<div style="font-size:11px;color:#706E6B;margin-bottom:8px">'+filtered.length+' contact'+(filtered.length!==1?'s':'')+' identified</div>';html+='<table style="width:100%;border-collapse:collapse"><thead><tr style="background:#F5F7FA">';["Contact","Content Viewed",""].forEach(function(h){html+='<th style="text-align:left;padding:8px 12px;font-size:10px;font-weight:700;color:#706E6B;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">'+h+'</th>';});html+='</tr></thead><tbody>';
+html+='<div style="font-size:11px;color:#706E6B;margin-bottom:8px">'+filtered.length+' contact'+(filtered.length!==1?'s':'')+' identified</div>';html+='<table style="width:100%;border-collapse:collapse"><thead><tr style="background:#F5F7FA">';["Contact","Engagement",""].forEach(function(h){html+='<th style="text-align:left;padding:8px 12px;font-size:10px;font-weight:700;color:#706E6B;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">'+h+'</th>';});html+='</tr></thead><tbody>';
 filtered.forEach(function(item,i){var c=item.c;var pages=item.pages;var rowBg=i%2===0?"#fff":"#F8F9FC";var pagesId="ct-pages-"+i;
 // Build display name and ID line
 var displayName=c.formName||'';
@@ -524,7 +564,7 @@ html+='<tr style="background:'+rowBg+';border-bottom:1px solid #F3F3F3"><td styl
 if(displayName){html+='<div style="font-size:12px;font-weight:600;color:#032D60">'+displayName+'</div>';}
 if(displayEmail){html+='<div style="font-size:10px;color:#706E6B">'+displayEmail+'</div>';}
 html+='<div style="font-size:11px;color:#706E6B;font-family:monospace">'+idLabel+'</div>';
-html+='</td><td style="padding:10px 12px;font-size:12px;color:#181818"><span style="font-weight:600">'+pages.length+'</span> <span style="color:#706E6B">page'+(pages.length!==1?'s':'')+'</span> <span style="font-size:10px;font-weight:600;color:'+engColor+';background:'+engColor+'14;border-radius:5px;padding:1px 7px;margin-left:4px">'+engLabel+'</span></td><td style="padding:10px 12px;white-space:nowrap;text-align:right"><button onclick="toggleContactPages(\''+pagesId+'\')" style="padding:3px 8px;border-radius:6px;border:1px solid #E5E5E5;background:#fff;font-size:10px;cursor:pointer;color:#706E6B;margin-right:6px">\u25BC Pages</button>'+(sfUrl?'<a href="'+sfUrl+'" target="_blank" rel="noopener" style="font-size:11px;font-weight:600;color:#0176D3;text-decoration:none;padding:3px 10px;border:1px solid #0176D322;border-radius:6px">View Contact \u2197</a>':'')+'</td></tr>';
+html+='</td><td style="padding:10px 12px;font-size:12px;color:#181818"><span style="font-weight:600">'+pages.length+'</span> <span style="color:#706E6B">page'+(pages.length!==1?'s':'')+'</span> <span style="font-size:10px;font-weight:600;color:'+engColor+';background:'+engColor+'14;border-radius:5px;padding:1px 7px;margin-left:4px">'+engLabel+'</span>'+(c.isAmplifier?' <span style="font-size:10px;font-weight:600;color:#8B5CF6;background:#8B5CF614;border-radius:5px;padding:1px 7px;margin-left:2px" title="Content shared to 3+ unique visitors on the same day">Amplifier</span>':'')+'</td><td style="padding:10px 12px;white-space:nowrap;text-align:right"><button onclick="toggleContactPages(\''+pagesId+'\')" style="padding:3px 8px;border-radius:6px;border:1px solid #E5E5E5;background:#fff;font-size:10px;cursor:pointer;color:#706E6B;margin-right:6px">\u25BC Pages</button>'+(sfUrl?'<a href="'+sfUrl+'" target="_blank" rel="noopener" style="font-size:11px;font-weight:600;color:#0176D3;text-decoration:none;padding:3px 10px;border:1px solid #0176D322;border-radius:6px">View Contact \u2197</a>':'')+'</td></tr>';
 html+='<tr id="'+pagesId+'" style="display:none;background:'+rowBg+'"><td colspan="3" style="padding:0 12px 12px 32px"><div style="border-left:2px solid #E5E5E5;padding-left:12px;margin-top:4px">';pages.sort(function(a,b){if(a.ts&&b.ts)return b.ts.localeCompare(a.ts);if(a.ts&&!b.ts)return -1;if(!a.ts&&b.ts)return 1;return 0;}).forEach(function(p){var tierColor=/deep read|deep listen|listener/i.test(p.tier)?CL.blue:/submitted/i.test(p.tier)?CL.green:/skim/i.test(p.tier)?'#DD7A01':/bounce|abandoned/i.test(p.tier)?CL.red:'#706E6B';var tsLabel='';if(p.ts&&p.ts.length===12){var mo=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];var mm=parseInt(p.ts.slice(4,6),10);var dd=parseInt(p.ts.slice(6,8),10);var hh=parseInt(p.ts.slice(8,10),10);var mn=p.ts.slice(10,12);var ampm=hh>=12?"PM":"AM";var h12=hh%12||12;tsLabel=mo[mm-1]+" "+dd+" "+h12+":"+mn+" "+ampm;}var anonTag=p.wasAnon?'<span style="font-size:9px;font-weight:600;color:#8B5CF6;background:#8B5CF614;border-radius:4px;padding:1px 5px;flex-shrink:0" title="Activity before contact was identified">pre-ID</span>':'';var didTag=p.did?'<span style="font-size:8px;color:#B0AEA9;font-family:monospace;flex-shrink:0" title="Device ID">'+p.did.slice(0,8)+'</span>':'';html+='<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #F5F7FA"><span style="width:5px;height:5px;border-radius:50%;background:'+(p.wasAnon?'#8B5CF6':'#D0D5DD')+';flex-shrink:0"></span>'+(tsLabel?'<span style="font-size:10px;color:#706E6B;flex-shrink:0;min-width:105px;font-family:monospace">'+tsLabel+'</span>':'')+'<span style="font-size:11px;color:#181818;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+p.cleanTitle+'">'+trunc(p.cleanTitle,40)+'</span>'+didTag+anonTag+'<span style="font-size:10px;font-weight:600;color:'+tierColor+';background:'+tierColor+'18;border-radius:5px;padding:2px 8px;flex-shrink:0;white-space:nowrap">'+p.tier+'</span></div>';});html+='</div></td></tr>';});html+='</tbody></table>';}
 // Unidentified visitors
 var anonList=Object.values(anonIndex);var anonFiltered=anonList.map(function(a){return{a:a,pages:getFilteredPages(a)};}).filter(function(item){return item.pages.length>0&&contactMatchesSearch(item.a,item.pages);});
