@@ -422,6 +422,8 @@ function buildContactsIndex(){
   source.forEach(function(row){
     if(!row.label)return;
     if(row.action==='Identify')return; // skip Identify events themselves
+    // Debug: log Form Capture rows
+    if(row.action&&row.action.indexOf('Form')>-1)console.log('Form event found:',JSON.stringify({action:row.action,label:row.label,category:row.category}));
 
     // Extract sfc or anon ID
     var sfcMatch=row.label.match(/sfc:([A-Za-z0-9]{18}|[A-Za-z0-9]{15})(?![A-Za-z0-9])/);
@@ -491,6 +493,11 @@ function buildContactsIndex(){
     }
   });
   promoteKeys.forEach(function(k){delete anonIndex[k];});
+  // Debug: log form-enriched contacts
+  var formContacts=Object.values(contactsIndex).filter(function(c){return c.formName||c.formEmail;});
+  console.log('Contacts with form data:',formContacts.length,formContacts.map(function(c){return{id:c.sfId||c.anonId,name:c.formName,email:c.formEmail};}));
+  var anonRemaining=Object.keys(anonIndex).length;
+  console.log('Anon visitors remaining (no form):',anonRemaining);
 }
 var CONTENT_TIERS=['Deep Read','Deep Listen','Skim','Bounce','Listener'];var contactPageSearch='';
 function parsePage(p){var tierMatch=p.label.match(/^(Deep Read|Deep Listen|Skim|Bounce|Listener|Submitted|Abandoned|Impression|Daily Visit|Open|Form Capture):\s*/i);var tier=tierMatch?tierMatch[1]:(Object.keys(p.actions)[0]||'');if(/^(Impression|Daily Visit|Open|Rail|Minimize|Form Capture)$/i.test(tier))return null;var cleanTitle=tierMatch?p.label.slice(tierMatch[0].length):p.label;cleanTitle=cleanTitle.replace(/\s*\|\s*sfc:[A-Za-z0-9]+$/,'').replace(/\s*\|\s*anon:[a-f0-9]+/i,'').replace(/\s*\|\s*ts:\d+/,'').replace(/\s*\|\s*did:[a-f0-9-]+/i,'').trim();if(/^pip$/i.test(cleanTitle))return null;if(/^Form Capture/i.test(p.label))return null;return{tier:tier,cleanTitle:cleanTitle,ts:p.ts||null,did:p.did||null,wasAnon:p.wasAnon||false};}
