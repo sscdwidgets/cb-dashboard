@@ -417,7 +417,7 @@ function buildContactsIndex(){
   var anonToSfc={};
   source.forEach(function(row){
     if(row.action!=='Identify'||!row.label)return;
-    var m=row.label.match(/anon:([a-f0-9]{8})\s*>\s*sfc:([A-Za-z0-9]{15,18})/i);
+    var m=row.label.match(/anon:([a-f0-9]{8,12})\s*>\s*sfc:([A-Za-z0-9]{15,18})/i);
     if(m)anonToSfc[m[1]]=m[2];
   });
 
@@ -428,7 +428,7 @@ function buildContactsIndex(){
 
     // Extract sfc or anon ID
     var sfcMatch=row.label.match(/sfc:([A-Za-z0-9]{18}|[A-Za-z0-9]{15})(?![A-Za-z0-9])/);
-    var anonMatch=row.label.match(/anon:([a-f0-9]{8})(?![a-f0-9])/i);
+    var anonMatch=row.label.match(/anon:([a-f0-9]{8,12})(?![a-f0-9])/i);
     var sfId=null;var anonId=null;var wasAnon=false;
 
     if(sfcMatch){
@@ -502,7 +502,7 @@ function buildContactsIndex(){
   source.forEach(function(row){
     if(!row.label||row.action==='Identify')return;
     var sfcMatch=row.label.match(/sfc:([A-Za-z0-9]{18}|[A-Za-z0-9]{15})(?![A-Za-z0-9])/);
-    var anonMatch=row.label.match(/anon:([a-f0-9]{8})(?![a-f0-9])/i);
+    var anonMatch=row.label.match(/anon:([a-f0-9]{8,12})(?![a-f0-9])/i);
     var sfId=null;var anonId=null;
     if(sfcMatch){sfId=sfcMatch[1];anonId='direct';}
     else if(anonMatch){
