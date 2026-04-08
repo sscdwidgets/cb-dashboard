@@ -446,19 +446,31 @@ function buildContactsIndex(){
 
     if(sfId){
       // Identified contact (directly or via anon linking)
-      if(!contactsIndex[sfId])contactsIndex[sfId]={sfId:sfId,pages:{},totalEvents:0,hasAnonHistory:false};
+      if(!contactsIndex[sfId])contactsIndex[sfId]={sfId:sfId,pages:{},totalEvents:0,hasAnonHistory:false,formName:null,formEmail:null};
       var c=contactsIndex[sfId];
       c.totalEvents+=(row.events||0);
       if(wasAnon)c.hasAnonHistory=true;
+      // Parse Form Capture events for name/email
+      if(actionType==='Form Capture'){
+        var fcParts=labelClean.replace(/^Form Capture:\s*/i,'').split(/\s*\|\s*/);
+        if(fcParts[0]&&fcParts[0]!=='Unknown')c.formName=fcParts[0];
+        if(fcParts[1]&&fcParts[1].indexOf('@')>-1)c.formEmail=fcParts[1];
+      }
       var pageKey=labelClean+(ts?"|"+ts:"");
       if(!c.pages[pageKey])c.pages[pageKey]={label:labelClean,category:category,actions:{},events:0,ts:ts,did:did,wasAnon:wasAnon};
       c.pages[pageKey].events+=(row.events||0);
       c.pages[pageKey].actions[actionType]=(c.pages[pageKey].actions[actionType]||0)+(row.events||0);
     }else if(anonId){
       // Unidentified anonymous visitor — no Identify event found
-      if(!anonIndex[anonId])anonIndex[anonId]={anonId:anonId,pages:{},totalEvents:0};
+      if(!anonIndex[anonId])anonIndex[anonId]={anonId:anonId,pages:{},totalEvents:0,formName:null,formEmail:null};
       var a=anonIndex[anonId];
       a.totalEvents+=(row.events||0);
+      // Parse Form Capture events for name/email
+      if(actionType==='Form Capture'){
+        var afcParts=labelClean.replace(/^Form Capture:\s*/i,'').split(/\s*\|\s*/);
+        if(afcParts[0]&&afcParts[0]!=='Unknown')a.formName=afcParts[0];
+        if(afcParts[1]&&afcParts[1].indexOf('@')>-1)a.formEmail=afcParts[1];
+      }
       var apk=labelClean+(ts?"|"+ts:"");
       if(!a.pages[apk])a.pages[apk]={label:labelClean,category:category,actions:{},events:0,ts:ts,did:did,wasAnon:true};
       a.pages[apk].events+=(row.events||0);
@@ -466,9 +478,22 @@ function buildContactsIndex(){
     }
     // Rows with neither sfc: nor anon: are legacy pre-tracking rows — skip
   });
+
+  // Pass 3: Promote anon visitors who submitted a form to identified contacts
+  var promoteKeys=[];
+  Object.keys(anonIndex).forEach(function(anonId){
+    var a=anonIndex[anonId];
+    if(a.formName||a.formEmail){
+      // Move to contactsIndex keyed by anon ID (prefixed to avoid collision with SFC IDs)
+      var key='anon:'+anonId;
+      contactsIndex[key]={sfId:null,anonId:anonId,pages:a.pages,totalEvents:a.totalEvents,hasAnonHistory:true,formName:a.formName,formEmail:a.formEmail};
+      promoteKeys.push(anonId);
+    }
+  });
+  promoteKeys.forEach(function(k){delete anonIndex[k];});
 }
 var CONTENT_TIERS=['Deep Read','Deep Listen','Skim','Bounce','Listener'];var contactPageSearch='';
-function parsePage(p){var tierMatch=p.label.match(/^(Deep Read|Deep Listen|Skim|Bounce|Listener|Impression|Daily Visit|Open):\s*/i);var tier=tierMatch?tierMatch[1]:(Object.keys(p.actions)[0]||'');if(/^(Impression|Daily Visit|Open|Rail|Minimize)$/i.test(tier))return null;var cleanTitle=tierMatch?p.label.slice(tierMatch[0].length):p.label;cleanTitle=cleanTitle.replace(/\s*\|\s*sfc:[A-Za-z0-9]+$/,'').replace(/\s*\|\s*anon:[a-f0-9]+/i,'').replace(/\s*\|\s*ts:\d+/,'').replace(/\s*\|\s*did:[a-f0-9-]+/i,'').trim();if(/^pip$/i.test(cleanTitle))return null;return{tier:tier,cleanTitle:cleanTitle,ts:p.ts||null,did:p.did||null,wasAnon:p.wasAnon||false};}
+function parsePage(p){var tierMatch=p.label.match(/^(Deep Read|Deep Listen|Skim|Bounce|Listener|Impression|Daily Visit|Open|Form Capture):\s*/i);var tier=tierMatch?tierMatch[1]:(Object.keys(p.actions)[0]||'');if(/^(Impression|Daily Visit|Open|Rail|Minimize|Form Capture)$/i.test(tier))return null;var cleanTitle=tierMatch?p.label.slice(tierMatch[0].length):p.label;cleanTitle=cleanTitle.replace(/\s*\|\s*sfc:[A-Za-z0-9]+$/,'').replace(/\s*\|\s*anon:[a-f0-9]+/i,'').replace(/\s*\|\s*ts:\d+/,'').replace(/\s*\|\s*did:[a-f0-9-]+/i,'').trim();if(/^pip$/i.test(cleanTitle))return null;if(/^Form Capture/i.test(p.label))return null;return{tier:tier,cleanTitle:cleanTitle,ts:p.ts||null,did:p.did||null,wasAnon:p.wasAnon||false};}
 function renderContactsTab(){var el=document.getElementById("tab-contacts");if(!el)return;var noData=!RAW_DATA||!RAW_DATA.length;
 var html='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px"><div class="chart-title" style="margin-bottom:0">Identified Contacts</div><input type="text" id="contacts-search" placeholder="Search by page, ID, or anon ID..." oninput="setContactPageSearch(this.value)" style="padding:5px 10px;border-radius:8px;border:1px solid #E5E5E5;font-size:12px;font-family:inherit;color:#181818;outline:none;width:260px"></div>';if(noData){html+='<div style="padding:40px;text-align:center;color:#706E6B;font-size:13px">Load data to identify contacts.</div>';}else{html+='<div id="contacts-list">'+renderContactRows()+'</div>';}el.innerHTML=html;}
 function renderContactRows(){var contacts=Object.values(contactsIndex);contacts.sort(function(a,b){return b.totalEvents-a.totalEvents;});var filtered=contacts.map(function(c){return{c:c,pages:getFilteredPages(c)};}).filter(function(item){return item.pages.length>0&&contactMatchesSearch(item.c,item.pages);});
@@ -476,8 +501,13 @@ var html='';
 // Calculate date range in days for score normalization
 var fromVal=document.getElementById("date-from").value;var toVal=document.getElementById("date-to").value;var rangeDays=1;if(fromVal&&toVal){var d1=new Date(fromVal+"T12:00:00");var d2=new Date(toVal+"T12:00:00");rangeDays=Math.max(1,Math.round((d2-d1)/(86400000))+1);}var rangeWeeks=Math.max(1,rangeDays/7);
 if(filtered.length>0){
-html+='<div style="font-size:11px;color:#706E6B;margin-bottom:8px">'+filtered.length+' contact'+(filtered.length!==1?'s':'')+' identified</div>';html+='<table style="width:100%;border-collapse:collapse"><thead><tr style="background:#F5F7FA">';["Salesforce ID","Content Viewed",""].forEach(function(h){html+='<th style="text-align:left;padding:8px 12px;font-size:10px;font-weight:700;color:#706E6B;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">'+h+'</th>';});html+='</tr></thead><tbody>';
-filtered.forEach(function(item,i){var c=item.c;var pages=item.pages;var sfUrl="https://southstatecorrespondent.lightning.force.com/"+c.sfId;var rowBg=i%2===0?"#fff":"#F8F9FC";var pagesId="ct-pages-"+i;
+html+='<div style="font-size:11px;color:#706E6B;margin-bottom:8px">'+filtered.length+' contact'+(filtered.length!==1?'s':'')+' identified</div>';html+='<table style="width:100%;border-collapse:collapse"><thead><tr style="background:#F5F7FA">';["Contact","Content Viewed",""].forEach(function(h){html+='<th style="text-align:left;padding:8px 12px;font-size:10px;font-weight:700;color:#706E6B;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">'+h+'</th>';});html+='</tr></thead><tbody>';
+filtered.forEach(function(item,i){var c=item.c;var pages=item.pages;var rowBg=i%2===0?"#fff":"#F8F9FC";var pagesId="ct-pages-"+i;
+// Build display name and ID line
+var displayName=c.formName||'';
+var displayEmail=c.formEmail||'';
+var idLabel=c.sfId||('anon:'+c.anonId)||'';
+var sfUrl=c.sfId?'https://southstatecorrespondent.lightning.force.com/'+c.sfId:null;
 // Contact-level engagement score: weight each page interaction, normalize to weekly rate
 var engScore=0;pages.forEach(function(p){var t=p.tier.toLowerCase();if(t==='deep read'||t==='deep listen')engScore+=3;else if(t==='listener')engScore+=2;else if(t==='skim')engScore+=1;});
 var weeklyRate=engScore/rangeWeeks;
@@ -487,7 +517,11 @@ if(weeklyRate>=5){engLabel='Champion';engColor='#2E7D32';}
 else if(weeklyRate>=2){engLabel='Active';engColor=CL.blue;}
 else if(weeklyRate>=0.5){engLabel='Exploring';engColor=CL.gold;}
 else{engLabel='Passing';engColor='#706E6B';}
-html+='<tr style="background:'+rowBg+';border-bottom:1px solid #F3F3F3"><td style="padding:10px 12px;font-size:12px;font-weight:600;color:#032D60;font-family:monospace">'+c.sfId+'</td><td style="padding:10px 12px;font-size:12px;color:#181818"><span style="font-weight:600">'+pages.length+'</span> <span style="color:#706E6B">page'+(pages.length!==1?'s':'')+'</span> <span style="font-size:10px;font-weight:600;color:'+engColor+';background:'+engColor+'14;border-radius:5px;padding:1px 7px;margin-left:4px">'+engLabel+'</span></td><td style="padding:10px 12px;white-space:nowrap;text-align:right"><button onclick="toggleContactPages(\''+pagesId+'\')" style="padding:3px 8px;border-radius:6px;border:1px solid #E5E5E5;background:#fff;font-size:10px;cursor:pointer;color:#706E6B;margin-right:6px">\u25BC Pages</button><a href="'+sfUrl+'" target="_blank" rel="noopener" style="font-size:11px;font-weight:600;color:#0176D3;text-decoration:none;padding:3px 10px;border:1px solid #0176D322;border-radius:6px">View Contact \u2197</a></td></tr>';
+html+='<tr style="background:'+rowBg+';border-bottom:1px solid #F3F3F3"><td style="padding:10px 12px">';
+if(displayName){html+='<div style="font-size:12px;font-weight:600;color:#032D60">'+displayName+'</div>';}
+if(displayEmail){html+='<div style="font-size:10px;color:#706E6B">'+displayEmail+'</div>';}
+html+='<div style="font-size:10px;color:#B0AEA9;font-family:monospace">'+idLabel+'</div>';
+html+='</td><td style="padding:10px 12px;font-size:12px;color:#181818"><span style="font-weight:600">'+pages.length+'</span> <span style="color:#706E6B">page'+(pages.length!==1?'s':'')+'</span> <span style="font-size:10px;font-weight:600;color:'+engColor+';background:'+engColor+'14;border-radius:5px;padding:1px 7px;margin-left:4px">'+engLabel+'</span></td><td style="padding:10px 12px;white-space:nowrap;text-align:right"><button onclick="toggleContactPages(\''+pagesId+'\')" style="padding:3px 8px;border-radius:6px;border:1px solid #E5E5E5;background:#fff;font-size:10px;cursor:pointer;color:#706E6B;margin-right:6px">\u25BC Pages</button>'+(sfUrl?'<a href="'+sfUrl+'" target="_blank" rel="noopener" style="font-size:11px;font-weight:600;color:#0176D3;text-decoration:none;padding:3px 10px;border:1px solid #0176D322;border-radius:6px">View Contact \u2197</a>':'')+'</td></tr>';
 html+='<tr id="'+pagesId+'" style="display:none;background:'+rowBg+'"><td colspan="3" style="padding:0 12px 12px 32px"><div style="border-left:2px solid #E5E5E5;padding-left:12px;margin-top:4px">';pages.sort(function(a,b){if(a.ts&&b.ts)return b.ts.localeCompare(a.ts);if(a.ts&&!b.ts)return -1;if(!a.ts&&b.ts)return 1;return 0;}).forEach(function(p){var tierColor=/deep read|deep listen|listener/i.test(p.tier)?CL.blue:/skim/i.test(p.tier)?'#DD7A01':/bounce/i.test(p.tier)?CL.red:'#706E6B';var tsLabel='';if(p.ts&&p.ts.length===12){var mo=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];var mm=parseInt(p.ts.slice(4,6),10);var dd=parseInt(p.ts.slice(6,8),10);var hh=parseInt(p.ts.slice(8,10),10);var mn=p.ts.slice(10,12);var ampm=hh>=12?"PM":"AM";var h12=hh%12||12;tsLabel=mo[mm-1]+" "+dd+" "+h12+":"+mn+" "+ampm;}var anonTag=p.wasAnon?'<span style="font-size:9px;font-weight:600;color:#8B5CF6;background:#8B5CF614;border-radius:4px;padding:1px 5px;flex-shrink:0" title="Activity before contact was identified">pre-ID</span>':'';var didTag=p.did?'<span style="font-size:8px;color:#B0AEA9;font-family:monospace;flex-shrink:0" title="Device ID">'+p.did.slice(0,8)+'</span>':'';html+='<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #F5F7FA"><span style="width:5px;height:5px;border-radius:50%;background:'+(p.wasAnon?'#8B5CF6':'#D0D5DD')+';flex-shrink:0"></span>'+(tsLabel?'<span style="font-size:10px;color:#706E6B;flex-shrink:0;min-width:105px;font-family:monospace">'+tsLabel+'</span>':'')+'<span style="font-size:11px;color:#181818;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+p.cleanTitle+'">'+trunc(p.cleanTitle,40)+'</span>'+didTag+anonTag+'<span style="font-size:10px;font-weight:600;color:'+tierColor+';background:'+tierColor+'18;border-radius:5px;padding:2px 8px;flex-shrink:0;white-space:nowrap">'+p.tier+'</span></div>';});html+='</div></td></tr>';});html+='</tbody></table>';}
 // Unidentified visitors
 var anonList=Object.values(anonIndex);var anonFiltered=anonList.map(function(a){return{a:a,pages:getFilteredPages(a)};}).filter(function(item){return item.pages.length>0&&contactMatchesSearch(item.a,item.pages);});
@@ -508,11 +542,9 @@ function setContactPageSearch(val){contactPageSearch=val.toLowerCase().trim();va
 function getFilteredPages(c){return Object.values(c.pages).map(function(p){var parsed=parsePage(p);return parsed;}).filter(Boolean);}
 function contactMatchesSearch(c,pages){
   if(!contactPageSearch)return true;
-  // Build a big searchable string from all visible data for this contact
-  var hay=(c.sfId||'')+(c.anonId||'');
+  var hay=(c.sfId||'')+(c.anonId||'')+(c.formName?' '+c.formName:'')+(c.formEmail?' '+c.formEmail:'');
   pages.forEach(function(p){hay+=' '+p.cleanTitle+' '+p.tier;});
   hay=hay.toLowerCase();
-  // Support multiple search terms (split by space)
   var terms=contactPageSearch.split(/\s+/).filter(Boolean);
   return terms.every(function(t){return hay.indexOf(t)>-1;});
 }
