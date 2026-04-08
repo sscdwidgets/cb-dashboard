@@ -419,7 +419,9 @@ function buildContactsIndex(){
   });
 
   // Pass 2: Process all event rows
+  var debugCount=0;
   source.forEach(function(row){
+    if(debugCount<3){console.log('Raw row '+debugCount+':',JSON.stringify(row));debugCount++;}
     if(!row.label)return;
     if(row.action==='Identify')return; // skip Identify events themselves
     // Debug: log Form Capture rows
