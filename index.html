@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CommandBar Analytics Dashboard v2.7.0</title>
+<title>CommandBar Analytics Dashboard v2.8.0</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -109,7 +109,7 @@ tbody tr:hover{background:#F3F3F3}
   <div class="header">
     <div class="header-left">
       <div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
-      <div style="position:relative;display:inline-block"><div class="title">CommandBar Analytics<span style="margin-left:10px;font-size:11px;font-weight:300;letter-spacing:.5px;color:rgba(255,255,255,0.35);vertical-align:middle">v2.7.0</span></div><div class="subtitle" id="period-label"></div></div>
+      <div style="position:relative;display:inline-block"><div class="title">CommandBar Analytics<span style="margin-left:10px;font-size:11px;font-weight:300;letter-spacing:.5px;color:rgba(255,255,255,0.35);vertical-align:middle">v2.8.0</span></div><div class="subtitle" id="period-label"></div></div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <div style="display:flex;gap:4px;align-items:center">
@@ -138,16 +138,18 @@ tbody tr:hover{background:#F3F3F3}
   <div id="tabs-bar" class="tabs">
     <button class="tab active" data-tab="contacts">Contacts</button>
     <button class="tab" data-tab="homepage">Homepage Engagement</button>
+    <button class="tab" data-tab="portal">Portal Visits</button>
     <button class="tab" data-tab="companies">Companies</button>
     <button class="tab" data-tab="map">Firmographic Map</button>
     <button class="tab" data-tab="art">ACQ Risk Tool</button>
   </div>
   <div id="tab-contacts" style="margin-top:20px"></div>
   <div id="tab-homepage" class="hidden" style="margin-top:20px"></div>
+  <div id="tab-portal" class="hidden" style="margin-top:20px"></div>
   <div id="tab-companies" class="hidden" style="margin-top:20px"></div>
   <div id="tab-map" class="hidden" style="margin-top:20px"></div>
   <div id="tab-art" class="hidden" style="margin-top:20px"></div>
-  <div class="footer" id="footer">CommandBar Analytics Dashboard v2.7.0 · Powered by SiteImprove Events + Leadfeeder · SouthState Correspondent</div>
+  <div class="footer" id="footer">CommandBar Analytics Dashboard v2.8.0 · Powered by SiteImprove Events + Leadfeeder · SouthState Correspondent</div>
 </div>
 <script>
 var AUTH_KEY = 'sscd2026';
@@ -257,6 +259,7 @@ function render(){
   buildContactsIndex();
   if(currentTab==="contacts")renderContactsTab();
   if(currentTab==="homepage")renderHomepageTab();
+  if(currentTab==="portal")renderPortalTab();
 }
 function renderCompaniesTab(){var chtml='<div style="display:flex;gap:0;border-radius:4px;border:1px solid #E5E5E5;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.04);margin-bottom:16px;overflow:hidden">';chtml+=feedSidebarHTML("co-feed-sidebar");chtml+='<div style="flex:1;min-width:0;padding:16px 18px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px"><div style="display:flex;align-items:center;gap:8px"><div class="chart-title" style="margin-bottom:0">Visitor Companies</div></div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#706E6B;cursor:pointer"><input type="checkbox" id="co-filter-banking" onchange="renderCompaniesTable()"> Banking &amp; Finance only</label><label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#706E6B;cursor:pointer"><input type="checkbox" id="co-filter-internal" checked onchange="renderCompaniesTable()"> Hide internal</label><select id="co-sort" onchange="renderCompaniesTable()" style="padding:4px 8px;border-radius:4px;border:1px solid #E5E5E5;font-size:11px;font-family:inherit"><option value="quality">Quality Score</option><option value="last_visit">Last Visit</option><option value="name">Name</option><option value="employees">Employees</option></select><button class="import-btn" id="co-fetch-btn" onclick="fetchCompanies()" style="background:#2E844A;padding:5px 12px;font-size:11px">Reload</button></div></div><div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap"><input type="text" id="co-search-name" placeholder="Search company name..." oninput="renderCompaniesTable()" style="padding:6px 10px;border-radius:4px;border:1px solid #E5E5E5;font-size:12px;font-family:inherit;flex:1;min-width:160px"><input type="text" id="co-search-state" placeholder="Filter by state..." oninput="renderCompaniesTable()" style="padding:6px 10px;border-radius:4px;border:1px solid #E5E5E5;font-size:12px;font-family:inherit;width:140px"></div><div id="co-status" style="font-size:11px;color:#706E6B;margin-bottom:8px"></div><div id="co-table"></div></div></div><div id="co-insights"></div>';document.getElementById("tab-companies").innerHTML=chtml;if(companiesData)renderCompaniesTable();}
 function renderMapTab(){var mhtml='<div style="display:flex;gap:0;border-radius:4px;border:1px solid #E5E5E5;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.04);margin-bottom:16px;overflow:hidden">';mhtml+=feedSidebarHTML("map-feed-sidebar");mhtml+='<div style="flex:1;min-width:0;padding:16px 18px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px"><div style="display:flex;align-items:center;gap:8px"><div id="map-breadcrumb"><span class="chart-title" style="margin-bottom:0">Firmographic Map</span></div></div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button id="map-back-btn" onclick="mapGoBack()" style="display:none;padding:4px 12px;border-radius:4px;border:1px solid #E5E5E5;background:#fff;font-size:11px;cursor:pointer;color:#0176D3;font-weight:600">\u2190 Back</button><button class="import-btn" onclick="fetchMapData()" style="background:#2E844A;padding:5px 12px;font-size:11px">Reload</button></div></div><div id="map-status" style="font-size:11px;color:#706E6B;margin-bottom:8px"></div><div id="map-container" style="position:relative;width:100%;min-height:400px"></div></div></div><div id="map-detail" style="margin-top:8px"></div>';document.getElementById("tab-map").innerHTML=mhtml;if(companiesData&&mapStateData)renderUSMap();}
@@ -287,7 +290,7 @@ function renderCityList(container,sc){var sd=mapStateData[sc];if(!sd){container.
 function mapDrillCity(city){mapCurrentCity=city;mapCurrentView="city";renderUSMap();}
 function renderCityCompanies(container,sc,city){var sd=mapStateData[sc];if(!sd||!sd.cities[city]){container.innerHTML="No data.";return;}var cos=sd.cities[city];var html='<div style="display:flex;flex-direction:column;gap:8px">';cos.forEach(function(c){var qColor=c.quality>=8?"#2E7D32":c.quality>=5?"#0176D3":c.quality>=3?"#FFBF3F":"#706E6B";var empLabel=c.employee_count?c.employee_count>=10001?"10k+":c.employee_count>=1000?Math.round(c.employee_count/1000)+"k":String(c.employee_count):"\u2013";html+='<div style="padding:12px;border-radius:10px;border:1px solid #E5E5E5;background:#fff"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">';if(c.logo_url)html+='<img src="'+c.logo_url+'" style="width:32px;height:32px;border-radius:6px;object-fit:contain;background:#F5F7FA" onerror="this.style.display=\'none\'">';html+='<div style="flex:1"><div style="font-size:14px;font-weight:700;color:#032D60">'+c.name+'</div><div style="font-size:10px;color:#706E6B">'+(c.industry||"")+(c.employee_count?" \u00b7 "+empLabel+" employees":"")+'</div></div><span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;font-size:14px;font-weight:700;background:'+qColor+'14;color:'+qColor+'">'+c.quality+'</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;font-size:10px;color:#706E6B"><span>Last visit: '+(c.last_visit_date||"\u2013")+'</span>';if(c.website_url)html+='<a href="'+c.website_url+'" target="_blank" style="color:#0176D3;text-decoration:none">'+c.website_url.replace(/^https?:\/\//,"").replace(/\/+$/,"")+'</a>';html+='</div>';var pagesId="map-pages-"+c.id.replace(/[^a-zA-Z0-9]/g,"").slice(0,20);html+='<div style="margin-top:8px"><button onclick="toggleCompanyPages(\''+c.id+'\',\''+pagesId+'\')" style="padding:3px 10px;border-radius:6px;border:1px solid #E5E5E5;background:#fff;font-size:10px;cursor:pointer;color:#0176D3;font-weight:600">\u25BC View Pages</button></div><div id="'+pagesId+'" style="display:none"><div id="'+pagesId+'-content" style="padding:8px 0;font-size:11px;color:#706E6B">Loading...</div></div></div>';});html+='</div>';container.innerHTML=html;}
 function mapGoBack(){if(mapCurrentView==="city"){mapCurrentView="state";mapCurrentCity="";}else if(mapCurrentView==="state"){mapCurrentView="us";mapCurrentState="";}renderUSMap();}
-document.querySelectorAll("#tabs-bar .tab").forEach(btn=>{btn.addEventListener("click",()=>{document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));btn.classList.add("active");currentTab=btn.dataset.tab;["contacts","homepage","companies","map","art"].forEach(t=>{document.getElementById("tab-"+t).classList.toggle("hidden",t!==currentTab);});if(currentTab==="companies"){renderCompaniesTab();if(!companiesData)setTimeout(fetchCompanies,100);}if(currentTab==="map"){renderMapTab();if(!companiesData)setTimeout(fetchMapData,100);}if(currentTab==="contacts"){renderContactsTab();}if(currentTab==="homepage"){renderHomepageTab();}if(currentTab==="art"){renderARTTab();if(!artData)setTimeout(fetchART,100);}});});
+document.querySelectorAll("#tabs-bar .tab").forEach(btn=>{btn.addEventListener("click",()=>{document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));btn.classList.add("active");currentTab=btn.dataset.tab;["contacts","homepage","portal","companies","map","art"].forEach(t=>{document.getElementById("tab-"+t).classList.toggle("hidden",t!==currentTab);});if(currentTab==="companies"){renderCompaniesTab();if(!companiesData)setTimeout(fetchCompanies,100);}if(currentTab==="map"){renderMapTab();if(!companiesData)setTimeout(fetchMapData,100);}if(currentTab==="contacts"){renderContactsTab();}if(currentTab==="homepage"){renderHomepageTab();}if(currentTab==="portal"){renderPortalTab();}if(currentTab==="art"){renderARTTab();if(!artData)setTimeout(fetchART,100);}});});
 var LOADING_MSGS=[
   "James is squinting at a spreadsheet somewhere...",
   "Geoff is negotiating with the SiteImprove API...",
@@ -362,7 +365,7 @@ function mergeEventRows(allArrays) {
   return Object.values(merged);
 }
 async function fetchAPI(){const fromEl=document.getElementById("date-from");const toEl=document.getElementById("date-to");const btn=document.getElementById("fetch-btn");const msgEl=document.getElementById("import-msg");if(!fromEl.value||!toEl.value){msgEl.innerHTML='<div class="import-msg error"><span>Select both start and end dates.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';return;}const from=fromEl.value.replace(/-/g,"");const to=toEl.value.replace(/-/g,"");if(from>to){msgEl.innerHTML='<div class="import-msg error"><span>Start date must be before end date.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';return;}const origText=btn.innerHTML;btn.innerHTML="Fetching...";btn.style.opacity=".6";btn.style.pointerEvents="none";msgEl.innerHTML="";
-try{btn.innerHTML="Fetching...";const allData=await fetchSiteImproveRange(from,to,null,function(msg){msgEl.innerHTML='<div class="import-msg success" style="background:#0176D314;color:#0176D3"><span>'+msg+'</span></div>';btn.innerHTML="Chunking...";});if(!allData.length){msgEl.innerHTML='<div class="import-msg error"><span>No events found for this date range.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";return;}RAW_DATA=allData.filter(function(r){return r.category==="CommandBar";});RAW_DATA_ALL=allData;companiesData=null;mapStateData=null;mapCurrentView="us";companyPagesCache={};histData=null;artData=null;const fd=fromEl.value,td=toEl.value;const fmtDate=function(d){var p=d.split("-");var m=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];return m[parseInt(p[1],10)-1]+" "+parseInt(p[2],10)+", "+p[0]};PERIOD=fmtDate(fd)+(fd===td?"":" \u2013 "+fmtDate(td));hasData=true;msgEl.innerHTML='<div class="import-msg success"><span>'+RAW_DATA.length+' CommandBar events loaded for '+PERIOD+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';render();buildContactsIndex();if(currentTab==="contacts")renderContactsTab();if(currentTab==="homepage")renderHomepageTab();if(currentTab==="art"){renderARTTab();setTimeout(fetchART,300);}setTimeout(fetchCompanies,300);}catch(err){console.error("API fetch error:",err);document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>Fetch failed: '+err.message+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';}btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";}
+try{btn.innerHTML="Fetching...";const allData=await fetchSiteImproveRange(from,to,null,function(msg){msgEl.innerHTML='<div class="import-msg success" style="background:#0176D314;color:#0176D3"><span>'+msg+'</span></div>';btn.innerHTML="Chunking...";});if(!allData.length){msgEl.innerHTML='<div class="import-msg error"><span>No events found for this date range.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";return;}RAW_DATA=allData.filter(function(r){return r.category==="CommandBar";});RAW_DATA_ALL=allData;companiesData=null;mapStateData=null;mapCurrentView="us";companyPagesCache={};histData=null;artData=null;const fd=fromEl.value,td=toEl.value;const fmtDate=function(d){var p=d.split("-");var m=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];return m[parseInt(p[1],10)-1]+" "+parseInt(p[2],10)+", "+p[0]};PERIOD=fmtDate(fd)+(fd===td?"":" \u2013 "+fmtDate(td));hasData=true;msgEl.innerHTML='<div class="import-msg success"><span>'+RAW_DATA.length+' CommandBar events loaded for '+PERIOD+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';render();buildContactsIndex();if(currentTab==="contacts")renderContactsTab();if(currentTab==="homepage")renderHomepageTab();if(currentTab==="portal")renderPortalTab();if(currentTab==="art"){renderARTTab();setTimeout(fetchART,300);}setTimeout(fetchCompanies,300);}catch(err){console.error("API fetch error:",err);document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>Fetch failed: '+err.message+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';}btn.innerHTML=origText;btn.style.opacity="1";btn.style.pointerEvents="auto";}
 (function(){var today=new Date();var yesterday=new Date(today);yesterday.setDate(today.getDate()-1);var fmt=function(d){var y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),dd=String(d.getDate()).padStart(2,"0");return y+"-"+m+"-"+dd;};document.getElementById("date-from").value=fmt(yesterday);document.getElementById("date-to").value=fmt(yesterday);var btns=document.querySelectorAll(".date-quick");if(btns[1])btns[1].classList.add("active");if(authPassed){fetchLfFeeds();setTimeout(fetchAPI,300);}})();
 document.getElementById("csv-input").addEventListener("change",function(e){const file=e.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=function(evt){try{const result=parseCSV(evt.target.result);if(result.data.length===0){document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>No CommandBar events found.</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';return;}RAW_DATA=result.data;RAW_DATA_ALL=result.allRows||result.data;if(result.period)PERIOD=result.period;hasData=true;document.getElementById("import-msg").innerHTML='<div class="import-msg success"><span>'+result.data.length+' events loaded from '+file.name+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';render();}catch(err){document.getElementById("import-msg").innerHTML='<div class="import-msg error"><span>Parse error: '+err.message+'</span><span class="close" onclick="this.parentElement.remove()">\u00d7</span></div>';}};reader.readAsText(file,"utf-16");this.value="";});
 var contactsIndex={};
@@ -573,9 +576,8 @@ function renderHomepageTab(){
   html+=card('Total Clicks',totalClicks.toLocaleString(),'Across all CTAs',CL.blue);
   html+=card('Deep Scroll Rate',deepScrollPct+'%','Visitors past 75%',CL.gold);
   html+='</div>';
-  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">';
   var clickList=Object.keys(clicks).map(function(k){return {label:k,events:clicks[k],users:Object.keys(clickAnons[k]||{}).length};}).sort(function(a,b){return b.events-a.events;}).slice(0,12);
-  html+='<div class="chart-card"><div class="chart-title">Top Clicks</div>';
+  html+='<div class="chart-card" style="margin-bottom:12px"><div class="chart-title">Top Clicks</div>';
   if(!clickList.length){html+='<div style="font-size:11px;color:#706E6B;padding:12px 0">No click events for this period.</div>';}
   else{
     var maxC=clickList[0].events;
@@ -585,16 +587,6 @@ function renderHomepageTab(){
     });
   }
   html+='</div>';
-  var sectionList=Object.keys(sections).map(function(k){return {label:k,events:sections[k],users:Object.keys(sectionAnons[k]||{}).length};}).sort(function(a,b){return b.users-a.users;});
-  html+='<div class="chart-card"><div class="chart-title">Section Visibility</div>';
-  if(!sectionList.length){html+='<div style="font-size:11px;color:#706E6B;padding:12px 0">No section events. Add <code style="font-size:10px;background:#F3F3F3;padding:1px 4px;border-radius:3px">id="..."</code> or <code style="font-size:10px;background:#F3F3F3;padding:1px 4px;border-radius:3px">data-section="..."</code> to homepage sections.</div>';}
-  else{
-    sectionList.forEach(function(s){
-      var coverage=uniqueVisitors>0?Math.round((s.users/uniqueVisitors)*100):0;
-      html+='<div class="top5-item"><div class="top5-row"><span class="top5-title" title="'+s.label.replace(/"/g,'&quot;')+'">'+s.label+'</span><span class="top5-right"><span class="top5-count">'+coverage+'%</span><span style="font-size:10px;color:#706E6B">'+s.users+'u</span></span></div><div class="top5-bar"><div class="top5-fill" style="width:'+coverage+'%;background:'+CL.navy+'"></div></div></div>';
-    });
-  }
-  html+='</div></div>';
   html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">';
   html+='<div class="chart-card"><div class="chart-title">Scroll Depth Funnel</div>';
   ['25','50','75','100'].forEach(function(p){
@@ -628,12 +620,136 @@ function renderHomepageTab(){
     html+='</div>';
   }
   var topClick=clickList.length?clickList[0]:null;
-  var topSection=sectionList.length?sectionList[0]:null;
   html+='<div class="insights"><h3>Homepage Insights</h3><div>';
   html+='<div><strong>Audience:</strong> '+uniqueVisitors+' unique visitor'+(uniqueVisitors!==1?'s':'')+(identifiedCount>0?', '+identifiedCount+' identified by Salesforce ID':' (none identified yet)')+'.</div>';
   if(topClick)html+='<div><strong>Most Clicked:</strong> "'+trunc(topClick.label,70)+'" \u2014 '+topClick.events+' click'+(topClick.events!==1?'s':'')+' from '+topClick.users+' visitor'+(topClick.users!==1?'s':'')+'.</div>';
-  if(topSection)html+='<div><strong>Most Viewed Section:</strong> "'+topSection.label+'" \u2014 seen by '+(uniqueVisitors>0?Math.round((topSection.users/uniqueVisitors)*100):0)+'% of visitors.</div>';
   html+='<div><strong>Deep Engagement:</strong> '+deepScrollPct+'% of visitors scrolled past the 75% mark.</div>';
+  html+='</div></div>';
+  el.innerHTML=html;
+}
+// ── PORTAL VISITS TAB ──
+function renderPortalTab(){
+  var el=document.getElementById("tab-portal");
+  if(!el)return;
+  var source=(RAW_DATA_ALL&&RAW_DATA_ALL.length)?RAW_DATA_ALL:RAW_DATA;
+  if(!source||!source.length){
+    el.innerHTML='<div style="padding:40px;text-align:center;color:#706E6B;font-size:13px">Load data to see portal visits.</div>';
+    return;
+  }
+  var rows=source.filter(function(r){return (r.category||'')==='Portal'&&(r.action||'')==='Visit';});
+  var header='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px"><div class="chart-title" style="margin-bottom:0">Portal Visits</div><div style="font-size:11px;color:#706E6B">'+rows.length+' event row'+(rows.length!==1?'s':'')+(PERIOD?' \u00b7 '+PERIOD:'')+'</div></div>';
+  if(!rows.length){
+    el.innerHTML=header+'<div style="padding:40px;text-align:center;color:#706E6B;font-size:13px">No portal visit events for this period. Portal visits are tracked when a link with <code style="font-size:11px;background:#F3F3F3;padding:1px 5px;border-radius:3px">?cb=1</code> brings a visitor into focus mode, and on every subsequent page during that session.</div>';
+    return;
+  }
+  var anonSet={},sfidSet={},sfcSet={};
+  var pageVisits={};
+  var visitors={};
+  var totalEvents=0;
+  rows.forEach(function(r){
+    var lbl=r.label||'';
+    var ev=r.events||0;
+    totalEvents+=ev;
+    var am=lbl.match(/anon:([a-f0-9]{8,12})/i);
+    var sm=lbl.match(/sfc:([A-Za-z0-9]{18}|[A-Za-z0-9]{15})(?![A-Za-z0-9])/);
+    var sidm=lbl.match(/sfid:([A-Za-z0-9]{18})(?![A-Za-z0-9])/);
+    var tsm=lbl.match(/\|\s*ts:(\d{12})/);
+    var anonId=am?am[1]:null;
+    var sfcId=sm?sm[1]:null;
+    var sfid=sidm?sidm[1]:null;
+    var ts=tsm?tsm[1]:null;
+    var path=lbl.replace(/\s*\|\s*sfc:[A-Za-z0-9]+/,'').replace(/\s*\|\s*sfid:[A-Za-z0-9]+/,'').replace(/\s*\|\s*anon:[a-f0-9]+/i,'').replace(/\s*\|\s*ts:\d+/,'').replace(/\s*\|\s*did:[a-f0-9-]+/i,'').trim();
+    if(anonId)anonSet[anonId]=true;
+    if(sfid)sfidSet[sfid]=true;
+    if(sfcId)sfcSet[sfcId]=true;
+    if(!pageVisits[path])pageVisits[path]={path:path,events:0,anons:{},sfids:{}};
+    pageVisits[path].events+=ev;
+    if(anonId)pageVisits[path].anons[anonId]=true;
+    if(sfid)pageVisits[path].sfids[sfid]=true;
+    if(anonId){
+      if(!visitors[anonId])visitors[anonId]={anonId:anonId,sfid:null,sfc:null,pages:[],totalEvents:0};
+      visitors[anonId].pages.push({path:path,ts:ts,events:ev});
+      visitors[anonId].totalEvents+=ev;
+      if(sfid&&!visitors[anonId].sfid)visitors[anonId].sfid=sfid;
+      if(sfcId&&!visitors[anonId].sfc)visitors[anonId].sfc=sfcId;
+    }
+  });
+  var uniqueVisitors=Object.keys(anonSet).length;
+  var sfidCount=Object.keys(sfidSet).length;
+  var sessionCount=Object.keys(visitors).length;
+  var avgPages=sessionCount>0?(totalEvents/sessionCount).toFixed(1):'0';
+  var html=header;
+  html+='<div class="cards">';
+  html+=card('Unique Visitors',uniqueVisitors.toLocaleString(),'Distinct portal sessions');
+  html+=card('SF Identified',sfidCount.toLocaleString(),'Via ?sfid= parameter',CL.green);
+  html+=card('Page Views',totalEvents.toLocaleString(),'Across all sessions',CL.blue);
+  html+=card('Pages / Session',avgPages,'Average depth',CL.gold);
+  html+='</div>';
+  var pageList=Object.values(pageVisits).sort(function(a,b){return b.events-a.events;});
+  html+='<div class="chart-card" style="margin-bottom:12px"><div class="chart-title">Top Portal Pages</div>';
+  if(!pageList.length){
+    html+='<div style="font-size:11px;color:#706E6B;padding:12px 0">No page data.</div>';
+  }else{
+    var maxP=pageList[0].events;
+    pageList.slice(0,15).forEach(function(p){
+      var users=Object.keys(p.anons).length;
+      var pct=Math.round((p.events/maxP)*100);
+      html+='<div class="top5-item"><div class="top5-row"><span class="top5-title" style="font-family:monospace" title="'+p.path.replace(/"/g,'&quot;')+'">'+trunc(p.path,60)+'</span><span class="top5-right"><span class="top5-count">'+p.events+'</span><span style="font-size:10px;color:#706E6B">'+users+'u</span></span></div><div class="top5-bar"><div class="top5-fill" style="width:'+pct+'%;background:'+CL.blue+'"></div></div></div>';
+    });
+  }
+  html+='</div>';
+  var sessions=Object.values(visitors).sort(function(a,b){
+    if(a.sfid&&!b.sfid)return -1;
+    if(!a.sfid&&b.sfid)return 1;
+    if(a.sfc&&!b.sfc)return -1;
+    if(!a.sfc&&b.sfc)return 1;
+    return b.totalEvents-a.totalEvents;
+  });
+  html+='<div class="chart-card" style="margin-bottom:12px"><div class="chart-title">Visitor Sessions ('+sessions.length+')</div>';
+  html+='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:#F5F7FA"><th style="text-align:left;padding:8px 12px;font-size:10px;font-weight:700;color:#706E6B;text-transform:uppercase;letter-spacing:.5px">Visitor</th><th style="text-align:center;padding:8px 12px;font-size:10px;font-weight:700;color:#706E6B;text-transform:uppercase;letter-spacing:.5px">Pages</th><th style="text-align:left;padding:8px 12px;font-size:10px;font-weight:700;color:#706E6B;text-transform:uppercase;letter-spacing:.5px">First Visit</th><th></th></tr></thead><tbody>';
+  var mo=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function fmtTs(ts){
+    if(!ts||ts.length!==12)return '';
+    var mm=parseInt(ts.slice(4,6),10);
+    var dd=parseInt(ts.slice(6,8),10);
+    var hh=parseInt(ts.slice(8,10),10);
+    var mn=ts.slice(10,12);
+    var ampm=hh>=12?"PM":"AM";
+    var h12=hh%12||12;
+    return mo[mm-1]+" "+dd+", "+h12+":"+mn+" "+ampm;
+  }
+  sessions.slice(0,50).forEach(function(s,i){
+    var rowBg=i%2===0?"#fff":"#F8F9FC";
+    var rowId='portal-pages-'+i;
+    s.pages.sort(function(a,b){
+      if(a.ts&&b.ts)return a.ts.localeCompare(b.ts);
+      return 0;
+    });
+    var firstTs=s.pages.length?s.pages[0].ts:null;
+    var firstLabel=fmtTs(firstTs);
+    var sfUrl=null;var idLabel,idType,idColor;
+    if(s.sfid){sfUrl='https://southstatecorrespondent.lightning.force.com/'+s.sfid;idLabel=s.sfid;idType='sfid';idColor='#2E844A';}
+    else if(s.sfc){sfUrl='https://southstatecorrespondent.lightning.force.com/'+s.sfc;idLabel=s.sfc;idType='sfc';idColor='#0176D3';}
+    else{idLabel=s.anonId;idType='anon';idColor='#706E6B';}
+    html+='<tr style="background:'+rowBg+';border-bottom:1px solid #F3F3F3"><td style="padding:10px 12px"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-family:monospace;font-size:11px;color:#181818">'+idLabel+'</span><span style="font-size:9px;font-weight:700;color:'+idColor+';background:'+idColor+'18;padding:1px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:.4px">'+idType+'</span></div></td><td style="text-align:center;padding:10px 12px"><span style="font-weight:700;color:#032D60">'+s.pages.length+'</span></td><td style="padding:10px 12px;font-size:11px;color:#706E6B;font-family:monospace">'+firstLabel+'</td><td style="padding:10px 12px;text-align:right;white-space:nowrap"><button onclick="toggleContactPages(\''+rowId+'\')" style="padding:3px 8px;border-radius:6px;border:1px solid #E5E5E5;background:#fff;font-size:10px;cursor:pointer;color:#706E6B;margin-right:6px">\u25BC Journey</button>'+(sfUrl?'<a href="'+sfUrl+'" target="_blank" rel="noopener" style="font-size:11px;font-weight:600;color:#0176D3;text-decoration:none;padding:3px 10px;border:1px solid #0176D322;border-radius:6px">View \u2197</a>':'')+'</td></tr>';
+    html+='<tr id="'+rowId+'" style="display:none;background:'+rowBg+'"><td colspan="4" style="padding:0 12px 12px 32px"><div style="border-left:2px solid #E5E5E5;padding-left:12px;margin-top:4px">';
+    s.pages.forEach(function(p,pi){
+      var pTs=fmtTs(p.ts);
+      var dotColor=pi===0?'#0176D3':'#D0D5DD';
+      var pShort=pTs?pTs.replace(/, \d/,', '):pTs;
+      html+='<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #F5F7FA"><span style="width:6px;height:6px;border-radius:50%;background:'+dotColor+';flex-shrink:0"></span>'+(pTs?'<span style="font-size:10px;color:#706E6B;flex-shrink:0;min-width:135px;font-family:monospace">'+pTs+'</span>':'')+'<span style="font-size:11px;color:#181818;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace" title="'+p.path+'">'+p.path+'</span>'+(pi===0?'<span style="font-size:9px;font-weight:700;color:#0176D3;background:#0176D314;padding:1px 6px;border-radius:4px;letter-spacing:.4px">ENTRY</span>':'')+'</div>';
+    });
+    html+='</div></td></tr>';
+  });
+  html+='</tbody></table>';
+  if(sessions.length>50)html+='<div style="font-size:11px;color:#706E6B;padding:10px 12px">Showing top 50 of '+sessions.length+' visitor sessions.</div>';
+  html+='</div>';
+  var topPage=pageList.length?pageList[0]:null;
+  var multiPageSessions=sessions.filter(function(s){return s.pages.length>1;}).length;
+  html+='<div class="insights"><h3>Portal Insights</h3><div>';
+  html+='<div><strong>Audience:</strong> '+uniqueVisitors+' unique visitor'+(uniqueVisitors!==1?'s':'')+' opened a portal session'+(sfidCount>0?', '+sfidCount+' identified via <code style="background:#1B96FF22;padding:0 4px;border-radius:3px;font-family:monospace">?sfid=</code>':' (no Salesforce IDs captured yet)')+'.</div>';
+  html+='<div><strong>Engagement:</strong> '+totalEvents+' total page view'+(totalEvents!==1?'s':'')+' across '+sessionCount+' session'+(sessionCount!==1?'s':'')+' \u2014 averaging <strong>'+avgPages+'</strong> pages per session. '+multiPageSessions+' visitor'+(multiPageSessions!==1?'s':'')+' went past the entry page.</div>';
+  if(topPage)html+='<div><strong>Most Visited:</strong> "'+trunc(topPage.path,70)+'" \u2014 '+topPage.events+' view'+(topPage.events!==1?'s':'')+' from '+Object.keys(topPage.anons).length+' visitor'+(Object.keys(topPage.anons).length!==1?'s':'')+'.</div>';
   html+='</div></div>';
   el.innerHTML=html;
 }
